@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import ProductImageUpload from "@/components/ProductImageUpload";
 import {
   Dialog,
   DialogContent,
@@ -65,6 +66,7 @@ const ProductManagement = () => {
     category_id: "",
     is_active: true,
   });
+  const [productImages, setProductImages] = useState<string[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -110,18 +112,30 @@ const ProductManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate at least one image
+    if (productImages.length === 0) {
+      toast({
+        title: "Validation Error",
+        description: "At least one product image is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const productData = {
       name: formData.name,
       slug: formData.slug || formData.name.toLowerCase().replace(/\s+/g, '-'),
       description: formData.description || null,
       price: parseFloat(formData.price),
       stock_quantity: parseInt(formData.stock_quantity),
-      image_url: formData.image_url || null,
+      image_url: productImages[0], // First image as main image
       category_id: formData.category_id || null,
       is_active: formData.is_active,
     };
 
     try {
+      let productId: string;
+
       if (editingProduct) {
         const { error } = await supabase
           .from('products')
@@ -129,15 +143,39 @@ const ProductManagement = () => {
           .eq('id', editingProduct.id);
 
         if (error) throw error;
+        productId = editingProduct.id;
+
+        // Delete existing product images
+        await supabase
+          .from('product_images' as any)
+          .delete()
+          .eq('product_id', productId);
+
         toast({ title: "Success", description: "Product updated successfully" });
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('products')
-          .insert(productData);
+          .insert(productData)
+          .select()
+          .single();
 
         if (error) throw error;
+        productId = data.id;
         toast({ title: "Success", description: "Product created successfully" });
       }
+
+      // Insert product images
+      const imageRecords = productImages.map((url, index) => ({
+        product_id: productId,
+        image_url: url,
+        display_order: index,
+      }));
+
+      const { error: imagesError } = await supabase
+        .from('product_images' as any)
+        .insert(imageRecords);
+
+      if (imagesError) throw imagesError;
 
       setIsOpen(false);
       resetForm();
@@ -152,7 +190,7 @@ const ProductManagement = () => {
     }
   };
 
-  const handleEdit = (product: Product) => {
+  const handleEdit = async (product: Product) => {
     setEditingProduct(product);
     setFormData({
       name: product.name,
@@ -164,6 +202,25 @@ const ProductManagement = () => {
       category_id: product.category_id || "",
       is_active: product.is_active,
     });
+
+    // Load existing product images
+    try {
+      const { data: images } = await supabase
+        .from('product_images' as any)
+        .select('image_url')
+        .eq('product_id', product.id)
+        .order('display_order', { ascending: true });
+
+      if (images && images.length > 0) {
+        setProductImages(images.map((img: any) => img.image_url));
+      } else {
+        setProductImages(product.image_url ? [product.image_url] : []);
+      }
+    } catch (error) {
+      console.error('Error loading product images:', error);
+      setProductImages(product.image_url ? [product.image_url] : []);
+    }
+
     setIsOpen(true);
   };
 
@@ -200,6 +257,7 @@ const ProductManagement = () => {
       category_id: "",
       is_active: true,
     });
+    setProductImages([]);
     setEditingProduct(null);
   };
 
@@ -291,17 +349,13 @@ const ProductManagement = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="image_url">Image URL</Label>
-                  <Input
-                    id="image_url"
-                    type="url"
-                    placeholder="https://..."
-                    value={formData.image_url}
-                    onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                  />
-                </div>
               </div>
+
+              <ProductImageUpload
+                onImagesChange={setProductImages}
+                existingImages={productImages}
+              />
+
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea

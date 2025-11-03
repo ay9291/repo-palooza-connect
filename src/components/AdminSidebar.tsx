@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Package, ShoppingBag, Store, LayoutDashboard, LogOut } from "lucide-react";
+import { Package, ShoppingBag, Store, LayoutDashboard, LogOut, Home } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -68,26 +68,45 @@ export function AdminSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <div className="mt-auto p-4">
-          {!isCollapsed && (
-            <Button
-              variant="outline"
-              onClick={handleSignOut}
-              className="w-full"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
-          )}
-          {isCollapsed && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleSignOut}
-              className="w-full"
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
+        <div className="mt-auto p-4 space-y-2">
+          {!isCollapsed ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => navigate('/')}
+                className="w-full"
+              >
+                <Home className="h-4 w-4 mr-2" />
+                Home
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleSignOut}
+                className="w-full"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => navigate('/')}
+                className="w-full"
+              >
+                <Home className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleSignOut}
+                className="w-full"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </>
           )}
         </div>
       </SidebarContent>

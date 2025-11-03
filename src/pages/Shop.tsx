@@ -65,9 +65,10 @@ const Shop = () => {
     if (!user) {
       toast({
         title: "Login Required",
-        description: "Please login to add items to cart",
+        description: "You need to login first to add item to cart",
         variant: "destructive",
       });
+      window.location.href = '/login';
       return;
     }
 

@@ -6,6 +6,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Loader2, ShoppingCart, ArrowLeft } from "lucide-react";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 
 interface Product {
   id: string;
@@ -17,10 +24,17 @@ interface Product {
   slug: string;
 }
 
+interface ProductImage {
+  id: string;
+  image_url: string;
+  display_order: number;
+}
+
 const ProductDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
+  const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -40,6 +54,16 @@ const ProductDetail = () => {
 
       if (error) throw error;
       setProduct(data);
+
+      // Fetch product images
+      const { data: images, error: imagesError } = await supabase
+        .from('product_images' as any)
+        .select('*')
+        .eq('product_id', id)
+        .order('display_order', { ascending: true });
+
+      if (imagesError) throw imagesError;
+      setProductImages((images || []) as unknown as ProductImage[]);
     } catch (error) {
       console.error('Error fetching product:', error);
       toast({
@@ -141,11 +165,29 @@ const ProductDetail = () => {
 
         <div className="grid md:grid-cols-2 gap-8 mb-12">
           <div>
-            <img
-              src={product.image_url || '/placeholder.svg'}
-              alt={product.name}
-              className="w-full rounded-lg shadow-lg"
-            />
+            {productImages.length > 0 ? (
+              <Carousel className="w-full">
+                <CarouselContent>
+                  {productImages.map((image) => (
+                    <CarouselItem key={image.id}>
+                      <img
+                        src={image.image_url}
+                        alt={product.name}
+                        className="w-full rounded-lg shadow-lg aspect-square object-cover"
+                      />
+                    </CarouselItem>
+                  ))}
+                </CarouselContent>
+                <CarouselPrevious className="left-2" />
+                <CarouselNext className="right-2" />
+              </Carousel>
+            ) : (
+              <img
+                src={product.image_url || '/placeholder.svg'}
+                alt={product.name}
+                className="w-full rounded-lg shadow-lg aspect-square object-cover"
+              />
+            )}
           </div>
 
           <div className="space-y-6">
