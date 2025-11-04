@@ -136,9 +136,38 @@ const Checkout = () => {
 
       if (deleteError) throw deleteError;
 
+      // Get user profile for email
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user.id)
+        .single();
+
+      // Send order confirmation email
+      try {
+        await supabase.functions.invoke('send-order-email', {
+          body: {
+            customerEmail: profile?.email || user.email,
+            customerName: profile?.full_name || 'Customer',
+            orderNumber: orderData.order_number,
+            orderId: orderData.id,
+            totalAmount: totalAmount,
+            shippingAddress: shippingAddress,
+            items: cartItems.map(item => ({
+              name: item.product.name,
+              quantity: item.quantity,
+              price: item.product.price
+            }))
+          }
+        });
+      } catch (emailError) {
+        console.error('Error sending email:', emailError);
+        // Don't fail the order if email fails
+      }
+
       toast({
         title: "Order Placed!",
-        description: "Your order has been placed successfully",
+        description: `Your order #${orderData.order_number} has been placed successfully. Check your email for confirmation.`,
       });
 
       navigate('/');

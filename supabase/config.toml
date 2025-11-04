@@ -2,3 +2,6 @@ project_id = "lmprpgkwtakvozgorxdk"
 
 [functions.create-showroom]
 verify_jwt = true
+
+[functions.send-order-email]
+verify_jwt = true
