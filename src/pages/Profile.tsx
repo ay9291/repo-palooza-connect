@@ -9,7 +9,18 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Upload, User, Package, Settings } from "lucide-react";
+import { Loader2, Upload, User, Package, Settings, XCircle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Profile {
   id: string;
@@ -25,6 +36,8 @@ interface Order {
   status: string;
   created_at: string;
   shipping_address: string;
+  cancelled_by: string | null;
+  cancellation_reason: string | null;
 }
 
 const Profile = () => {
@@ -33,6 +46,8 @@ const Profile = () => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [fullName, setFullName] = useState("");
+  const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
+  const [cancellationReason, setCancellationReason] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -82,7 +97,7 @@ const Profile = () => {
   const fetchOrders = async (userId: string) => {
     const { data, error } = await supabase
       .from('orders')
-      .select('*')
+      .select('id, order_number, total_amount, status, created_at, shipping_address, cancelled_by, cancellation_reason')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -122,6 +137,48 @@ const Profile = () => {
     });
 
     fetchProfile(user.id);
+  };
+
+  const handleCancelOrder = async () => {
+    if (!cancelOrderId || !cancellationReason.trim()) {
+      toast({
+        title: "Error",
+        description: "Please provide a reason for cancellation",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { error } = await supabase
+      .from('orders')
+      .update({
+        status: 'cancelled',
+        cancelled_by: 'customer',
+        cancellation_reason: cancellationReason
+      })
+      .eq('id', cancelOrderId);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to cancel order",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: "Order cancelled successfully",
+    });
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      fetchOrders(user.id);
+    }
+
+    setCancelOrderId(null);
+    setCancellationReason("");
   };
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -292,11 +349,41 @@ const Profile = () => {
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="font-bold">₹{order.total_amount}</p>
-                            <p className="text-sm capitalize">{order.status}</p>
+                            <p className="font-bold">
+                              {order.total_amount > 0 ? `₹${order.total_amount.toLocaleString()}` : 'Bulk Order'}
+                            </p>
+                            <p className={`text-sm capitalize font-medium ${
+                              order.status === 'cancelled' ? 'text-red-600' : ''
+                            }`}>
+                              {order.status}
+                            </p>
                           </div>
                         </div>
-                        <p className="text-sm text-muted-foreground">{order.shipping_address}</p>
+                        <p className="text-sm text-muted-foreground mb-3">{order.shipping_address}</p>
+                        
+                        {order.status === 'cancelled' && (
+                          <div className="bg-red-50 border border-red-200 rounded p-3 mb-3">
+                            <p className="text-sm font-semibold text-red-600">
+                              Cancelled by: {order.cancelled_by === 'admin' ? 'Admin' : 'You'}
+                            </p>
+                            {order.cancelled_by === 'customer' && order.cancellation_reason && (
+                              <p className="text-sm text-red-700 mt-1">
+                                Reason: {order.cancellation_reason}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {(order.status === 'pending' || order.status === 'processing') && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setCancelOrderId(order.id)}
+                          >
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Cancel Order
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -326,6 +413,39 @@ const Profile = () => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <AlertDialog open={!!cancelOrderId} onOpenChange={() => setCancelOrderId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancel Order</AlertDialogTitle>
+              <AlertDialogDescription>
+                Please provide a reason for cancelling this order. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-4">
+              <Label htmlFor="reason">Cancellation Reason</Label>
+              <Textarea
+                id="reason"
+                placeholder="e.g., Found a better deal, Changed my mind, etc."
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+                className="mt-2"
+                rows={4}
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => {
+                setCancelOrderId(null);
+                setCancellationReason("");
+              }}>
+                Keep Order
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={handleCancelOrder} className="bg-destructive hover:bg-destructive/90">
+                Cancel Order
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
