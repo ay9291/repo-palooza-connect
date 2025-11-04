@@ -1,1 +1,4 @@
-project_id = "undqzkbruypaxkoyhupu"
+project_id = "lmprpgkwtakvozgorxdk"
+
+[functions.create-showroom]
+verify_jwt = true
