@@ -26,10 +26,6 @@ interface Order {
     full_name: string | null;
     email: string | null;
   } | null;
-  showrooms: {
-    business_name: string;
-    contact_person: string;
-  } | null;
 }
 
 const Orders = () => {
@@ -47,8 +43,7 @@ const Orders = () => {
         .from('orders')
         .select(`
           *,
-          profiles(full_name, email),
-          showrooms(business_name, contact_person)
+          profiles(full_name, email)
         `)
         .order('created_at', { ascending: false });
 
@@ -155,10 +150,10 @@ const Orders = () => {
                     <TableCell>
                       <div>
                         <div className="font-medium">
-                          {order.profiles?.full_name || order.showrooms?.business_name || 'N/A'}
+                          {order.profiles?.full_name || 'N/A'}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {order.profiles?.email || order.showrooms?.contact_person}
+                          {order.profiles?.email || 'N/A'}
                         </div>
                       </div>
                     </TableCell>
