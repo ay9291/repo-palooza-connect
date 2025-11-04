@@ -28,8 +28,8 @@ interface Order {
   total_amount: number;
   shipping_address: string;
   user_id: string;
-  cancelled_by: string | null;
-  cancellation_reason: string | null;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
   profiles: {
     full_name: string | null;
     email: string | null;

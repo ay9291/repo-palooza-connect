@@ -36,8 +36,8 @@ interface Order {
   status: string;
   created_at: string;
   shipping_address: string;
-  cancelled_by: string | null;
-  cancellation_reason: string | null;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
 }
 
 const Profile = () => {
@@ -97,7 +97,7 @@ const Profile = () => {
   const fetchOrders = async (userId: string) => {
     const { data, error } = await supabase
       .from('orders')
-      .select('id, order_number, total_amount, status, created_at, shipping_address, cancelled_by, cancellation_reason')
+      .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -106,7 +106,7 @@ const Profile = () => {
       return;
     }
 
-    setOrders(data || []);
+    setOrders(data as Order[] || []);
   };
 
   const handleUpdateProfile = async () => {
