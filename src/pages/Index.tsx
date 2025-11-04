@@ -1,66 +1,54 @@
+import { useState, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowRight, Package, ShoppingBag, TrendingUp, Phone } from "lucide-react";
 import { Link } from "react-router-dom";
 import ProductCard from "@/components/ProductCard";
+import { supabase } from "@/integrations/supabase/client";
 import heroImage from "@/assets/hero-engineered-furniture.jpg";
-import officeDesk from "@/assets/office-desk-engineered.jpg";
-import dressingTable from "@/assets/dressing-table-engineered.jpg";
-import cupboard from "@/assets/cupboard-engineered.jpg";
-import conferenceTable from "@/assets/conference-table.jpg";
 
 const Index = () => {
-  const featuredProducts = [
-    {
-      id: "1",
-      title: "Executive Office Desk",
-      modelNumber: "EOD-2024",
-      price: 8500,
-      wholesalePrice: 6500,
-      image: officeDesk,
-      category: "Office Furniture",
-      rating: 4.8,
-      isFeatured: true,
-      isNew: true
-    },
-    {
-      id: "2",
-      title: "Modern Dressing Table",
-      modelNumber: "MDT-2024",
-      price: 12000,
-      wholesalePrice: 9500,
-      image: dressingTable,
-      category: "Bedroom Furniture",
-      rating: 4.9,
-      isFeatured: true,
-      isNew: false
-    },
-    {
-      id: "3",
-      title: "Wardrobe Cupboard",
-      modelNumber: "WC-2024",
-      price: 18000,
-      wholesalePrice: 14500,
-      image: cupboard,
-      category: "Storage",
-      rating: 4.7,
-      isFeatured: true,
-      isNew: true
-    },
-    {
-      id: "4",
-      title: "Conference Table",
-      modelNumber: "CT-2024",
-      price: 25000,
-      wholesalePrice: 19500,
-      image: conferenceTable,
-      category: "Office Furniture",
-      rating: 4.9,
-      isFeatured: true,
-      isNew: false
+  const [featuredProducts, setFeaturedProducts] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchFeaturedProducts();
+  }, []);
+
+  const fetchFeaturedProducts = async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select(`
+        *,
+        categories (
+          name
+        )
+      `)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(4);
+
+    if (error) {
+      console.error('Error fetching products:', error);
+      return;
     }
-  ];
+
+    if (data) {
+      const formattedProducts = data.map(product => ({
+        id: product.id,
+        title: product.name,
+        modelNumber: product.slug,
+        price: product.price,
+        wholesalePrice: product.price,
+        image: product.image_url || heroImage,
+        category: product.categories?.name || 'Furniture',
+        rating: 4.5,
+        isFeatured: true,
+        isNew: true
+      }));
+      setFeaturedProducts(formattedProducts);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
