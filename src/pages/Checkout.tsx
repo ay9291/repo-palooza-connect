@@ -145,7 +145,7 @@ const Checkout = () => {
 
       // Send order confirmation email
       try {
-        await supabase.functions.invoke('send-order-email', {
+        const { data: emailResult, error: emailError } = await supabase.functions.invoke('send-order-email', {
           body: {
             customerEmail: profile?.email || user.email,
             customerName: profile?.full_name || 'Customer',
@@ -160,6 +160,12 @@ const Checkout = () => {
             }))
           }
         });
+        
+        if (emailError) {
+          console.error('Email function error:', emailError);
+        } else {
+          console.log('Email sent successfully:', emailResult);
+        }
       } catch (emailError) {
         console.error('Error sending email:', emailError);
         // Don't fail the order if email fails

@@ -76,7 +76,7 @@ const ProductDetail = () => {
     }
   };
 
-  const handleAddToCart = async () => {
+  const handleAddToCart = async (redirectToCheckout = false) => {
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
@@ -118,10 +118,14 @@ const ProductDetail = () => {
         if (error) throw error;
       }
 
-      toast({
-        title: "Added to Cart",
-        description: "Product added to your cart successfully",
-      });
+      if (redirectToCheckout) {
+        navigate('/checkout');
+      } else {
+        toast({
+          title: "Added to Cart",
+          description: "Product added to your cart successfully",
+        });
+      }
     } catch (error) {
       console.error('Error adding to cart:', error);
       toast({
@@ -210,15 +214,26 @@ const ProductDetail = () => {
               </p>
             </div>
 
-            <Button
-              onClick={handleAddToCart}
-              size="lg"
-              className="w-full md:w-auto"
-              disabled={product.stock_quantity === 0}
-            >
-              <ShoppingCart className="w-5 h-5 mr-2" />
-              {product.stock_quantity === 0 ? 'Out of Stock' : 'Add to Cart'}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                onClick={() => handleAddToCart(true)}
+                size="lg"
+                className="w-full sm:flex-1"
+                disabled={product.stock_quantity === 0}
+              >
+                {product.stock_quantity === 0 ? 'Out of Stock' : 'Buy Now'}
+              </Button>
+              <Button
+                onClick={() => handleAddToCart(false)}
+                size="lg"
+                variant="outline"
+                className="w-full sm:flex-1"
+                disabled={product.stock_quantity === 0}
+              >
+                <ShoppingCart className="w-5 h-5 mr-2" />
+                Add to Cart
+              </Button>
+            </div>
           </div>
         </div>
 
