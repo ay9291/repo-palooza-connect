@@ -198,8 +198,9 @@ const Orders = () => {
                         <TableCell>
                           {order.total_amount > 0 ? `₹${Number(order.total_amount).toLocaleString()}` : 'Bulk Order'}
                         </TableCell>
-                        <TableCell className="max-w-xs truncate">
-                          {order.shipping_address}
+                        <TableCell className="max-w-[200px]">
+                          <div className="truncate">{order.shipping_address.split('\n')[0]}</div>
+                          <div className="text-xs text-muted-foreground">Click arrow to view full address</div>
                         </TableCell>
                         <TableCell>
                           <Badge className={getStatusColor(order.status)}>
@@ -220,29 +221,39 @@ const Orders = () => {
                           </select>
                         </TableCell>
                       </TableRow>
-                      {order.status === 'cancelled' && (
-                        <CollapsibleContent asChild>
-                          <TableRow>
-                            <TableCell colSpan={7} className="bg-muted/30 border-l-4 border-l-red-500">
-                              <div className="py-2">
-                                <div className="font-semibold text-red-600 mb-1">
-                                  Cancelled by: {order.cancelled_by === 'admin' ? 'Admin' : 'Customer'}
+                      <CollapsibleContent asChild>
+                        <TableRow>
+                          <TableCell colSpan={7} className="bg-muted/30 border-l-4 border-l-primary">
+                            <div className="py-3 space-y-3">
+                              <div>
+                                <div className="font-semibold text-sm mb-1">Full Shipping Address:</div>
+                                <div className="text-sm text-muted-foreground whitespace-pre-line">
+                                  {order.shipping_address}
                                 </div>
-                                {order.cancelled_by === 'customer' && order.cancellation_reason && (
-                                  <div className="text-sm text-muted-foreground">
-                                    <span className="font-medium">Reason:</span> {order.cancellation_reason}
-                                  </div>
-                                )}
-                                {order.cancelled_by === 'admin' && (
-                                  <div className="text-sm text-muted-foreground italic">
-                                    Order was cancelled by administrator
-                                  </div>
-                                )}
                               </div>
-                            </TableCell>
-                          </TableRow>
-                        </CollapsibleContent>
-                      )}
+                              {order.status === 'cancelled' && (
+                                <div className="pt-2 border-t">
+                                  <div className="font-semibold text-red-600 mb-1">
+                                    Cancelled by: {order.cancelled_by === 'admin' ? 'Admin' : 'Customer'}
+                                  </div>
+                                  {order.cancelled_by === 'customer' && order.cancellation_reason && (
+                                    <div className="text-sm text-muted-foreground">
+                                      <span className="font-medium">Reason:</span> {order.cancellation_reason}
+                                    </div>
+                                  )}
+                                  {order.cancelled_by === 'admin' && (
+                                    <div className="text-sm text-muted-foreground italic">
+                                      Order was cancelled by administrator
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      </CollapsibleContent>
+                      {/* Remove the old cancellation CollapsibleContent */}
+                      {/* The cancellation info is now included in the main CollapsibleContent above */}
                     </>
                   </Collapsible>
                 ))

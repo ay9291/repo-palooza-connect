@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import AdvancedFilters, { FilterState } from "@/components/AdvancedFilters";
 
 interface Product {
   id: string;
@@ -32,6 +33,12 @@ const Shop = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("name");
+  const [filters, setFilters] = useState<FilterState>({
+    priceRange: [0, 100000],
+    materials: [],
+    colors: [],
+    inStockOnly: false,
+  });
   const { toast } = useToast();
 
   useEffect(() => {
@@ -117,10 +124,13 @@ const Shop = () => {
   };
 
   const filteredAndSortedProducts = products
-    .filter(p =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.description?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    .filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesPrice = p.price >= filters.priceRange[0] && p.price <= filters.priceRange[1];
+      const matchesStock = !filters.inStockOnly || p.stock_quantity > 0;
+      return matchesSearch && matchesPrice && matchesStock;
+    })
     .sort((a, b) => {
       switch (sortBy) {
         case "price-low":
@@ -168,6 +178,7 @@ const Shop = () => {
               className="pl-10"
             />
           </div>
+          <AdvancedFilters filters={filters} onFiltersChange={setFilters} />
           <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger className="w-full md:w-[200px]">
               <SelectValue placeholder="Sort by" />

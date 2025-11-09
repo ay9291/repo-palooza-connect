@@ -5,7 +5,11 @@ import ReviewSection from "@/components/ReviewSection";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Loader2, ShoppingCart, ArrowLeft } from "lucide-react";
+import { Loader2, ShoppingCart, ArrowLeft, ZoomIn } from "lucide-react";
+import WishlistButton from "@/components/WishlistButton";
+import SocialShare from "@/components/SocialShare";
+import StockNotification from "@/components/StockNotification";
+import ProductRecommendations from "@/components/ProductRecommendations";
 import {
   Carousel,
   CarouselContent,
@@ -13,6 +17,10 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 
 interface Product {
   id: string;
@@ -36,6 +44,7 @@ const ProductDetail = () => {
   const [product, setProduct] = useState<Product | null>(null);
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -174,11 +183,22 @@ const ProductDetail = () => {
                 <CarouselContent>
                   {productImages.map((image) => (
                     <CarouselItem key={image.id}>
-                      <img
-                        src={image.image_url}
-                        alt={product.name}
-                        className="w-full rounded-lg shadow-lg aspect-square object-cover"
-                      />
+                      <div className="relative group">
+                        <img
+                          src={image.image_url}
+                          alt={product.name}
+                          className="w-full rounded-lg shadow-lg aspect-square object-contain bg-muted cursor-zoom-in"
+                          onClick={() => setZoomedImage(image.image_url)}
+                        />
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => setZoomedImage(image.image_url)}
+                        >
+                          <ZoomIn className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </CarouselItem>
                   ))}
                 </CarouselContent>
@@ -186,11 +206,22 @@ const ProductDetail = () => {
                 <CarouselNext className="right-2" />
               </Carousel>
             ) : (
-              <img
-                src={product.image_url || '/placeholder.svg'}
-                alt={product.name}
-                className="w-full rounded-lg shadow-lg aspect-square object-cover"
-              />
+              <div className="relative group">
+                <img
+                  src={product.image_url || '/placeholder.svg'}
+                  alt={product.name}
+                  className="w-full rounded-lg shadow-lg aspect-square object-contain bg-muted cursor-zoom-in"
+                  onClick={() => setZoomedImage(product.image_url || '/placeholder.svg')}
+                />
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => setZoomedImage(product.image_url || '/placeholder.svg')}
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </Button>
+              </div>
             )}
           </div>
 
@@ -214,31 +245,57 @@ const ProductDetail = () => {
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                onClick={() => handleAddToCart(true)}
-                size="lg"
-                className="w-full sm:flex-1"
-                disabled={product.stock_quantity === 0}
-              >
-                {product.stock_quantity === 0 ? 'Out of Stock' : 'Buy Now'}
-              </Button>
-              <Button
-                onClick={() => handleAddToCart(false)}
-                size="lg"
-                variant="outline"
-                className="w-full sm:flex-1"
-                disabled={product.stock_quantity === 0}
-              >
-                <ShoppingCart className="w-5 h-5 mr-2" />
-                Add to Cart
-              </Button>
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => handleAddToCart(true)}
+                  size="lg"
+                  className="flex-1"
+                  disabled={product.stock_quantity === 0}
+                >
+                  {product.stock_quantity === 0 ? 'Out of Stock' : 'Buy Now'}
+                </Button>
+                <Button
+                  onClick={() => handleAddToCart(false)}
+                  size="lg"
+                  variant="outline"
+                  className="flex-1"
+                  disabled={product.stock_quantity === 0}
+                >
+                  <ShoppingCart className="w-5 h-5 mr-2" />
+                  Add to Cart
+                </Button>
+              </div>
+              
+              {product.stock_quantity === 0 && (
+                <StockNotification productId={product.id} productName={product.name} />
+              )}
+
+              <div className="flex gap-3 justify-center">
+                <WishlistButton productId={product.id} />
+                <SocialShare title={product.name} />
+              </div>
             </div>
           </div>
         </div>
 
         <ReviewSection productId={product.id} />
+        
+        <ProductRecommendations currentProductId={product.id} />
       </div>
+
+      {/* Image Zoom Dialog */}
+      <Dialog open={!!zoomedImage} onOpenChange={() => setZoomedImage(null)}>
+        <DialogContent className="max-w-4xl w-full p-0">
+          <div className="relative w-full h-[80vh]">
+            <img
+              src={zoomedImage || ''}
+              alt="Zoomed product"
+              className="w-full h-full object-contain"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

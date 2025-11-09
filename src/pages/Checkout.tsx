@@ -24,7 +24,14 @@ const Checkout = () => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [shippingAddress, setShippingAddress] = useState("");
+  const [shippingAddress, setShippingAddress] = useState({
+    fullName: "",
+    street: "",
+    city: "",
+    state: "",
+    zipCode: "",
+    phone: "",
+  });
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -72,10 +79,12 @@ const Checkout = () => {
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!shippingAddress.trim()) {
+    // Validate all fields
+    if (!shippingAddress.fullName || !shippingAddress.street || !shippingAddress.city || 
+        !shippingAddress.state || !shippingAddress.zipCode || !shippingAddress.phone) {
       toast({
         title: "Error",
-        description: "Please enter your shipping address",
+        description: "Please fill in all shipping address fields",
         variant: "destructive",
       });
       return;
@@ -100,13 +109,16 @@ const Checkout = () => {
 
       const totalAmount = calculateTotal();
 
+      // Format shipping address as a string
+      const formattedAddress = `${shippingAddress.fullName}\n${shippingAddress.street}\n${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.zipCode}\nPhone: ${shippingAddress.phone}`;
+
       // Create order
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert({
           user_id: user.id,
           total_amount: totalAmount,
-          shipping_address: shippingAddress,
+          shipping_address: formattedAddress,
           status: 'pending'
         })
         .select()
@@ -152,7 +164,7 @@ const Checkout = () => {
             orderNumber: orderData.order_number,
             orderId: orderData.id,
             totalAmount: totalAmount,
-            shippingAddress: shippingAddress,
+            shippingAddress: formattedAddress,
             items: cartItems.map(item => ({
               name: item.product.name,
               quantity: item.quantity,
@@ -231,16 +243,73 @@ const Checkout = () => {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handlePlaceOrder} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Shipping Address *</Label>
-                    <Textarea
-                      id="address"
-                      placeholder="Enter your complete shipping address"
-                      value={shippingAddress}
-                      onChange={(e) => setShippingAddress(e.target.value)}
-                      rows={4}
-                      required
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="fullName">Full Name *</Label>
+                      <Input
+                        id="fullName"
+                        placeholder="John Doe"
+                        value={shippingAddress.fullName}
+                        onChange={(e) => setShippingAddress({...shippingAddress, fullName: e.target.value})}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="street">Street Address *</Label>
+                      <Input
+                        id="street"
+                        placeholder="123 Main Street, Apt 4B"
+                        value={shippingAddress.street}
+                        onChange={(e) => setShippingAddress({...shippingAddress, street: e.target.value})}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="city">City *</Label>
+                      <Input
+                        id="city"
+                        placeholder="Mumbai"
+                        value={shippingAddress.city}
+                        onChange={(e) => setShippingAddress({...shippingAddress, city: e.target.value})}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="state">State *</Label>
+                      <Input
+                        id="state"
+                        placeholder="Maharashtra"
+                        value={shippingAddress.state}
+                        onChange={(e) => setShippingAddress({...shippingAddress, state: e.target.value})}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="zipCode">ZIP Code *</Label>
+                      <Input
+                        id="zipCode"
+                        placeholder="400001"
+                        value={shippingAddress.zipCode}
+                        onChange={(e) => setShippingAddress({...shippingAddress, zipCode: e.target.value})}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Phone Number *</Label>
+                      <Input
+                        id="phone"
+                        type="tel"
+                        placeholder="+91 98765 43210"
+                        value={shippingAddress.phone}
+                        onChange={(e) => setShippingAddress({...shippingAddress, phone: e.target.value})}
+                        required
+                      />
+                    </div>
                   </div>
 
                   <Button 

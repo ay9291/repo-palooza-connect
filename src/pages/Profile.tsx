@@ -88,7 +88,7 @@ const Profile = () => {
         id: data.id,
         full_name: data.full_name,
         email: data.email,
-        avatar_url: null
+        avatar_url: data.avatar_url || null
       });
       setFullName(data.full_name || '');
     }
@@ -212,13 +212,15 @@ const Profile = () => {
       .from('avatars')
       .getPublicUrl(filePath);
 
+    const avatarUrlWithCacheBuster = `${publicUrl}?t=${Date.now()}`;
+
     const { error: updateError } = await supabase
       .from('profiles')
-      .upsert({
-        id: user.id,
-        avatar_url: publicUrl,
+      .update({ 
+        avatar_url: avatarUrlWithCacheBuster,
         updated_at: new Date().toISOString()
-      });
+      })
+      .eq('id', user.id);
 
     if (updateError) {
       toast({
@@ -227,11 +229,11 @@ const Profile = () => {
         variant: "destructive",
       });
     } else {
+      setProfile(prev => prev ? { ...prev, avatar_url: avatarUrlWithCacheBuster } : null);
       toast({
         title: "Success",
         description: "Avatar updated successfully!",
       });
-      fetchProfile(user.id);
     }
 
     setUploading(false);

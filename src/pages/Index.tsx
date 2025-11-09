@@ -7,6 +7,8 @@ import { Link } from "react-router-dom";
 import ProductCard from "@/components/ProductCard";
 import { supabase } from "@/integrations/supabase/client";
 import heroImage from "@/assets/hero-engineered-furniture.jpg";
+import Testimonials from "@/components/Testimonials";
+import NewsletterSignup from "@/components/NewsletterSignup";
 
 const Index = () => {
   const [featuredProducts, setFeaturedProducts] = useState<any[]>([]);
@@ -151,6 +153,12 @@ const Index = () => {
           </div>
         </div>
       </section>
+
+      {/* Testimonials */}
+      <Testimonials />
+
+      {/* Newsletter */}
+      <NewsletterSignup />
 
       {/* CTA Section */}
       <section className="py-16 bg-gradient-accent">

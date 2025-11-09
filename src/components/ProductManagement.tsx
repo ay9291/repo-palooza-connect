@@ -238,6 +238,37 @@ const ProductManagement = () => {
     if (!confirm("Are you sure you want to delete this product?")) return;
 
     try {
+      // First delete order_items with this product
+      const { error: orderItemsError } = await supabase
+        .from('order_items')
+        .delete()
+        .eq('product_id', id);
+
+      if (orderItemsError) {
+        console.error('Error deleting order items:', orderItemsError);
+      }
+
+      // Delete product images
+      const { error: imagesError } = await supabase
+        .from('product_images' as any)
+        .delete()
+        .eq('product_id', id);
+
+      if (imagesError) {
+        console.error('Error deleting product images:', imagesError);
+      }
+
+      // Delete cart items with this product
+      const { error: cartError } = await supabase
+        .from('cart_items')
+        .delete()
+        .eq('product_id', id);
+
+      if (cartError) {
+        console.error('Error deleting cart items:', cartError);
+      }
+
+      // Finally delete the product
       const { error } = await supabase
         .from('products')
         .delete()

@@ -7,7 +7,9 @@ import {
   ShoppingCart, 
   User, 
   LogOut,
-  LayoutDashboard
+  LayoutDashboard,
+  Heart,
+  Package
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { supabase } from "@/integrations/supabase/client";
@@ -72,6 +74,8 @@ const Navigation = () => {
     { label: "Home", href: "/" },
     { label: "Shop", href: "/shop" },
     { label: "About Us", href: "/about" },
+    { label: "Blog", href: "/blog" },
+    { label: "FAQ", href: "/faq" },
     { label: "Contact", href: "/contact" },
   ];
 
@@ -109,12 +113,31 @@ const Navigation = () => {
               </Link>
             )}
 
+            {/* Orders Link */}
+            {user && (
+              <Link to="/orders">
+                <Button variant="ghost" size="sm" className="flex items-center gap-2">
+                  <Package className="w-4 h-4" />
+                  Orders
+                </Button>
+              </Link>
+            )}
+
             {/* Profile Link */}
             {user && (
               <Link to="/profile">
                 <Button variant="ghost" size="sm" className="flex items-center gap-2">
                   <User className="w-4 h-4" />
                   Profile
+                </Button>
+              </Link>
+            )}
+
+            {/* Wishlist */}
+            {user && (
+              <Link to="/wishlist">
+                <Button variant="ghost" size="icon">
+                  <Heart className="w-5 h-5" />
                 </Button>
               </Link>
             )}
@@ -185,6 +208,18 @@ const Navigation = () => {
                 </Link>
               )}
 
+              {/* Orders Link - Mobile */}
+              {user && (
+                <Link
+                  to="/orders"
+                  className="flex items-center gap-2 px-3 py-2 text-foreground hover:text-accent transition-smooth font-medium"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Package className="w-4 h-4" />
+                  My Orders
+                </Link>
+              )}
+
               {/* Profile Link - Mobile */}
               {user && (
                 <Link
@@ -194,6 +229,18 @@ const Navigation = () => {
                 >
                   <User className="w-4 h-4" />
                   Profile
+                </Link>
+              )}
+
+              {/* Wishlist Link - Mobile */}
+              {user && (
+                <Link
+                  to="/wishlist"
+                  className="flex items-center gap-2 px-3 py-2 text-foreground hover:text-accent transition-smooth font-medium"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Heart className="w-4 h-4" />
+                  Wishlist
                 </Link>
               )}
               
