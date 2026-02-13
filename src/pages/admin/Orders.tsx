@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, Package2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -20,9 +20,20 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
+interface OrderItem {
+  id: string;
+  quantity: number;
+  price_at_purchase: number;
+  products: {
+    name: string;
+    slug: string;
+    image_url: string | null;
+  } | null;
+}
+
 interface Order {
   id: string;
-  order_number: string;
+  order_number: string | null;
   created_at: string;
   status: string;
   total_amount: number;
@@ -34,6 +45,7 @@ interface Order {
     full_name: string | null;
     email: string | null;
   } | null;
+  order_items: OrderItem[];
 }
 
 const Orders = () => {
@@ -42,57 +54,57 @@ const Orders = () => {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadOrders();
-  }, []);
-
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from('orders')
+        .from("orders")
         .select(`
-          *,
-          profiles(full_name, email)
+          id,
+          order_number,
+          created_at,
+          status,
+          total_amount,
+          shipping_address,
+          user_id,
+          profiles(full_name, email),
+          order_items(
+            id,
+            quantity,
+            price_at_purchase,
+            products(name, slug, image_url)
+          )
         `)
-        .order('created_at', { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setOrders(data as any || []);
-    } catch (error) {
-      console.error('Error loading orders:', error);
+      setOrders((data as Order[]) || []);
+    } catch {
       toast({
         title: "Error",
         description: "Failed to load orders",
         variant: "destructive",
       });
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
-      const updateData: any = { status: newStatus };
-      
-      // If admin is cancelling, mark it as cancelled by admin
-      if (newStatus === 'cancelled') {
-        updateData.cancelled_by = 'admin';
+      const updateData: Record<string, string | null> = { status: newStatus };
+      if (newStatus === "cancelled") {
+        updateData.cancelled_by = "admin";
         updateData.cancellation_reason = null;
       }
 
-      const { error } = await supabase
-        .from('orders')
-        .update(updateData)
-        .eq('id', orderId);
-
+      const { error } = await supabase.from("orders").update(updateData).eq("id", orderId);
       if (error) throw error;
 
-      toast({
-        title: "Success",
-        description: "Order status updated",
-      });
-
+      toast({ title: "Success", description: "Order status updated" });
       loadOrders();
-    } catch (error) {
-      console.error('Error updating order:', error);
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update order status",
@@ -103,33 +115,43 @@ const Orders = () => {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      pending: "bg-yellow-500",
-      processing: "bg-blue-500",
-      shipped: "bg-purple-500",
-      delivered: "bg-green-500",
-      cancelled: "bg-red-500",
+      pending: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+      processing: "bg-sky-500/15 text-sky-600 border-sky-500/30",
+      shipped: "bg-violet-500/15 text-violet-600 border-violet-500/30",
+      delivered: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+      cancelled: "bg-rose-500/15 text-rose-600 border-rose-500/30",
     };
-    return colors[status] || "bg-gray-500";
+    return colors[status] || "bg-muted text-foreground border-border";
   };
 
-  const filteredOrders = orders.filter(order =>
-    order.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    order.profiles?.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    order.profiles?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredOrders = useMemo(
+    () =>
+      orders.filter((order) => {
+        const query = searchQuery.toLowerCase();
+        return (
+          order.order_number?.toLowerCase().includes(query) ||
+          order.profiles?.email?.toLowerCase().includes(query) ||
+          order.profiles?.full_name?.toLowerCase().includes(query)
+        );
+      }),
+    [orders, searchQuery]
   );
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Orders Management</h1>
-        <p className="text-muted-foreground">Track and manage customer orders</p>
+      <div className="rounded-2xl border bg-gradient-to-r from-background via-background to-accent/5 p-6">
+        <h1 className="text-3xl font-bold tracking-tight">Orders Management</h1>
+        <p className="text-muted-foreground">Track orders, review line-items, and update fulfillment status.</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>All Orders</CardTitle>
+      <Card className="border-border/60 shadow-sm">
+        <CardHeader className="space-y-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl">All Orders</CardTitle>
+            <Badge variant="outline">{filteredOrders.length} results</Badge>
+          </div>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
               placeholder="Search by order #, customer name or email..."
               value={searchQuery}
@@ -146,7 +168,7 @@ const Orders = () => {
                 <TableHead>Customer</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Amount</TableHead>
-                <TableHead>Address</TableHead>
+                <TableHead>Items</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -167,8 +189,8 @@ const Orders = () => {
                     asChild
                   >
                     <>
-                      <TableRow className="cursor-pointer hover:bg-muted/50">
-                        <TableCell className="font-mono font-bold">
+                      <TableRow className="hover:bg-muted/30">
+                        <TableCell className="font-mono font-semibold">
                           <div className="flex items-center gap-2">
                             <CollapsibleTrigger asChild>
                               <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
@@ -179,31 +201,25 @@ const Orders = () => {
                                 )}
                               </Button>
                             </CollapsibleTrigger>
-                            #{order.order_number}
+                            #{order.order_number || "N/A"}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div>
-                            <div className="font-medium">
-                              {order.profiles?.full_name || 'N/A'}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {order.profiles?.email || 'N/A'}
+                          <div className="flex items-center gap-2">
+                            <UserRound className="w-4 h-4 text-muted-foreground" />
+                            <div>
+                              <div className="font-medium">{order.profiles?.full_name || "N/A"}</div>
+                              <div className="text-sm text-muted-foreground">{order.profiles?.email || "N/A"}</div>
                             </div>
                           </div>
                         </TableCell>
+                        <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
                         <TableCell>
-                          {new Date(order.created_at).toLocaleDateString()}
+                          {order.total_amount > 0 ? `₹${Number(order.total_amount).toLocaleString()}` : "Bulk Order"}
                         </TableCell>
+                        <TableCell>{order.order_items?.length || 0}</TableCell>
                         <TableCell>
-                          {order.total_amount > 0 ? `₹${Number(order.total_amount).toLocaleString()}` : 'Bulk Order'}
-                        </TableCell>
-                        <TableCell className="max-w-[200px]">
-                          <div className="truncate">{order.shipping_address.split('\n')[0]}</div>
-                          <div className="text-xs text-muted-foreground">Click arrow to view full address</div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(order.status)}>
+                          <Badge variant="outline" className={getStatusColor(order.status)}>
                             {order.status}
                           </Badge>
                         </TableCell>
@@ -221,39 +237,46 @@ const Orders = () => {
                           </select>
                         </TableCell>
                       </TableRow>
+
                       <CollapsibleContent asChild>
                         <TableRow>
-                          <TableCell colSpan={7} className="bg-muted/30 border-l-4 border-l-primary">
-                            <div className="py-3 space-y-3">
+                          <TableCell colSpan={7} className="bg-muted/20 border-l-4 border-l-primary">
+                            <div className="py-4 space-y-4">
                               <div>
-                                <div className="font-semibold text-sm mb-1">Full Shipping Address:</div>
-                                <div className="text-sm text-muted-foreground whitespace-pre-line">
-                                  {order.shipping_address}
-                                </div>
+                                <p className="font-semibold text-sm mb-1">Shipping Address</p>
+                                <p className="text-sm text-muted-foreground whitespace-pre-line">{order.shipping_address}</p>
                               </div>
-                              {order.status === 'cancelled' && (
-                                <div className="pt-2 border-t">
-                                  <div className="font-semibold text-red-600 mb-1">
-                                    Cancelled by: {order.cancelled_by === 'admin' ? 'Admin' : 'Customer'}
+
+                              <div>
+                                <p className="font-semibold text-sm mb-2">Ordered Items</p>
+                                {order.order_items?.length ? (
+                                  <div className="space-y-2">
+                                    {order.order_items.map((item) => (
+                                      <div key={item.id} className="rounded-lg border bg-background p-3 flex items-center gap-3">
+                                        <img
+                                          src={item.products?.image_url || "/placeholder.svg"}
+                                          alt={item.products?.name || "Product"}
+                                          className="w-12 h-12 rounded-md object-cover border"
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-medium truncate">{item.products?.name || "Unknown product"}</p>
+                                          <p className="text-xs text-muted-foreground truncate">{item.products?.slug || "N/A"}</p>
+                                        </div>
+                                        <div className="text-right text-sm">
+                                          <p>Qty: <span className="font-medium">{item.quantity}</span></p>
+                                          <p className="text-muted-foreground">₹{Number(item.price_at_purchase).toLocaleString()}</p>
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
-                                  {order.cancelled_by === 'customer' && order.cancellation_reason && (
-                                    <div className="text-sm text-muted-foreground">
-                                      <span className="font-medium">Reason:</span> {order.cancellation_reason}
-                                    </div>
-                                  )}
-                                  {order.cancelled_by === 'admin' && (
-                                    <div className="text-sm text-muted-foreground italic">
-                                      Order was cancelled by administrator
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">No order items found for this order.</p>
+                                )}
+                              </div>
                             </div>
                           </TableCell>
                         </TableRow>
                       </CollapsibleContent>
-                      {/* Remove the old cancellation CollapsibleContent */}
-                      {/* The cancellation info is now included in the main CollapsibleContent above */}
                     </>
                   </Collapsible>
                 ))
