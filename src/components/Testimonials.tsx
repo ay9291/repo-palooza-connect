@@ -23,20 +23,19 @@ const Testimonials = () => {
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
 
   useEffect(() => {
-    const fetchTestimonials = async () => {
-      const { data, error } = await supabase
-        .from("testimonials")
-        .select("id, customer_name, customer_role, content, rating, image_url")
-        .eq("is_active", true)
-        .eq("is_featured", true)
-        .limit(6);
-
-      if (error) return;
-      setTestimonials((data as Testimonial[]) || []);
-    };
-
     fetchTestimonials();
   }, []);
+
+  const fetchTestimonials = async () => {
+    const { data } = await supabase
+      .from('testimonials' as any)
+      .select('*')
+      .eq('is_active', true)
+      .eq('is_featured', true)
+      .limit(6);
+
+    if (data) setTestimonials(data as any);
+  };
 
   if (testimonials.length === 0) return null;
 
@@ -59,7 +58,7 @@ const Testimonials = () => {
                 <Card className="h-full bg-gradient-card">
                   <CardContent className="p-6 flex flex-col h-full">
                     <Quote className="w-10 h-10 text-accent mb-4" />
-
+                    
                     {testimonial.rating && (
                       <div className="flex gap-1 mb-4">
                         {Array.from({ length: 5 }).map((_, i) => (
