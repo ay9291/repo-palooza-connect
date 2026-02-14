@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
@@ -12,13 +12,55 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, UserRound, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+
+type RawProfile =
+  | {
+      full_name: string | null;
+      email: string | null;
+    }
+  | {
+      full_name: string | null;
+      email: string | null;
+    }[]
+  | null;
+
+interface RawOrder {
+  id: string;
+  order_number: string | null;
+  created_at: string;
+  status: string;
+  total_amount: number;
+  shipping_address: string | null;
+  user_id: string;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
+  profiles: RawProfile;
+}
+
+interface OrderItemRow {
+  id: string;
+  order_id: string;
+  quantity: number;
+  price_at_purchase: number;
+  product_id: string;
+}
+
+interface ProductLite {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  image_url: string | null;
+}
+
+interface OrderItem {
+  id: string;
+  order_id: string;
+  quantity: number;
+  price_at_purchase: number;
+  product: ProductLite | null;
+}
 
 interface Order {
   id: string;
@@ -28,108 +70,184 @@ interface Order {
   total_amount: number;
   shipping_address: string;
   user_id: string;
-  cancelled_by?: string | null;
-  cancellation_reason?: string | null;
-  profiles: {
-    full_name: string | null;
-    email: string | null;
-  } | null;
+  cancelled_by: string | null;
+  cancellation_reason: string | null;
+  customer_name: string;
+  customer_email: string;
+  order_items: OrderItem[];
 }
+
+const getStatusColor = (status: string) => {
+  const colors: Record<string, string> = {
+    pending: "bg-amber-500/15 text-amber-700 border-amber-500/30",
+    processing: "bg-sky-500/15 text-sky-700 border-sky-500/30",
+    shipped: "bg-violet-500/15 text-violet-700 border-violet-500/30",
+    delivered: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
+    cancelled: "bg-rose-500/15 text-rose-700 border-rose-500/30",
+  };
+
+  return colors[status] || "bg-muted text-foreground border-border";
+};
+
+const normalizeProfile = (profile: RawProfile) => {
+  if (!profile) return { full_name: null, email: null };
+  if (Array.isArray(profile)) return profile[0] || { full_name: null, email: null };
+  return profile;
+};
 
 const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: rawOrders, error: ordersError } = await supabase
+        .from("orders")
+        .select("id, order_number, created_at, status, total_amount, shipping_address, user_id, cancelled_by, cancellation_reason, profiles(full_name, email)")
+        .order("created_at", { ascending: false });
+
+      if (ordersError) throw ordersError;
+
+      const ordersList: RawOrder[] = (rawOrders as RawOrder[]) || [];
+      const orderIds = ordersList.map((o) => o.id);
+
+      let itemsByOrderId: Record<string, OrderItem[]> = {};
+      if (orderIds.length > 0) {
+        const { data: rawItems, error: itemsError } = await supabase
+          .from("order_items")
+          .select("id, order_id, quantity, price_at_purchase, product_id")
+          .in("order_id", orderIds);
+
+        if (itemsError) throw itemsError;
+
+        const itemRows: OrderItemRow[] = (rawItems as OrderItemRow[]) || [];
+        const productIds = [...new Set(itemRows.map((i) => i.product_id).filter(Boolean))];
+
+        let productsById: Record<string, ProductLite> = {};
+        if (productIds.length > 0) {
+          const { data: productsData, error: productsError } = await supabase
+            .from("products")
+            .select("id, name, slug, image_url")
+            .in("id", productIds);
+
+          if (productsError) throw productsError;
+
+          productsById = ((productsData as ProductLite[]) || []).reduce<Record<string, ProductLite>>((acc, product) => {
+            acc[product.id] = product;
+            return acc;
+          }, {});
+        }
+
+        itemsByOrderId = itemRows.reduce<Record<string, OrderItem[]>>((acc, item) => {
+          const mapped: OrderItem = {
+            id: item.id,
+            order_id: item.order_id,
+            quantity: Number(item.quantity) || 0,
+            price_at_purchase: Number(item.price_at_purchase) || 0,
+            product: productsById[item.product_id] || null,
+          };
+
+          if (!acc[item.order_id]) acc[item.order_id] = [];
+          acc[item.order_id].push(mapped);
+          return acc;
+        }, {});
+      }
+
+      const normalizedOrders: Order[] = ordersList.map((order) => {
+        const profile = normalizeProfile(order.profiles);
+        return {
+          id: order.id,
+          order_number: order.order_number || "N/A",
+          created_at: order.created_at,
+          status: order.status || "pending",
+          total_amount: Number(order.total_amount) || 0,
+          shipping_address: order.shipping_address || "Address not available",
+          user_id: order.user_id,
+          cancelled_by: order.cancelled_by || null,
+          cancellation_reason: order.cancellation_reason || null,
+          customer_name: profile.full_name || "N/A",
+          customer_email: profile.email || "N/A",
+          order_items: itemsByOrderId[order.id] || [],
+        };
+      });
+
+      setOrders(normalizedOrders);
+    } catch (error) {
+      console.error("Failed loading admin orders", error);
+      toast({
+        title: "Error",
+        description: "Failed to load orders.",
+        variant: "destructive",
+      });
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
   useEffect(() => {
     loadOrders();
-  }, []);
+  }, [loadOrders]);
 
-  const loadOrders = async () => {
+  const filteredOrders = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return orders;
+
+    return orders.filter((order) => {
+      return (
+        order.order_number.toLowerCase().includes(query) ||
+        order.customer_name.toLowerCase().includes(query) ||
+        order.customer_email.toLowerCase().includes(query)
+      );
+    });
+  }, [orders, searchQuery]);
+
+  const updateOrderStatus = async (orderId: string, status: string) => {
+    setUpdatingOrderId(orderId);
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          profiles(full_name, email)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setOrders(data as any || []);
-    } catch (error) {
-      console.error('Error loading orders:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load orders",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
-    try {
-      const updateData: any = { status: newStatus };
-      
-      // If admin is cancelling, mark it as cancelled by admin
-      if (newStatus === 'cancelled') {
-        updateData.cancelled_by = 'admin';
-        updateData.cancellation_reason = null;
+      const patch: Record<string, string | null> = { status };
+      if (status === "cancelled") {
+        patch.cancelled_by = "admin";
+        patch.cancellation_reason = null;
       }
 
-      const { error } = await supabase
-        .from('orders')
-        .update(updateData)
-        .eq('id', orderId);
-
+      const { error } = await supabase.from("orders").update(patch).eq("id", orderId);
       if (error) throw error;
 
-      toast({
-        title: "Success",
-        description: "Order status updated",
-      });
-
-      loadOrders();
+      toast({ title: "Order updated", description: "Order status saved successfully." });
+      await loadOrders();
     } catch (error) {
-      console.error('Error updating order:', error);
+      console.error("Failed updating order status", error);
       toast({
         title: "Error",
-        description: "Failed to update order status",
+        description: "Failed to update order status.",
         variant: "destructive",
       });
+    } finally {
+      setUpdatingOrderId(null);
     }
   };
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      pending: "bg-yellow-500",
-      processing: "bg-blue-500",
-      shipped: "bg-purple-500",
-      delivered: "bg-green-500",
-      cancelled: "bg-red-500",
-    };
-    return colors[status] || "bg-gray-500";
-  };
-
-  const filteredOrders = orders.filter(order =>
-    order.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    order.profiles?.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    order.profiles?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Orders Management</h1>
-        <p className="text-muted-foreground">Track and manage customer orders</p>
+      <div className="rounded-2xl border bg-gradient-to-r from-background via-background to-accent/5 p-6">
+        <h1 className="text-3xl font-bold tracking-tight">Orders Management</h1>
+        <p className="text-muted-foreground">Track orders, review line-items, and update fulfillment status.</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>All Orders</CardTitle>
+      <Card className="border-border/60 shadow-sm">
+        <CardHeader className="space-y-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl">All Orders</CardTitle>
+            <Badge variant="outline">{filteredOrders.length} results</Badge>
+          </div>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
               placeholder="Search by order #, customer name or email..."
               value={searchQuery}
@@ -138,128 +256,141 @@ const Orders = () => {
             />
           </div>
         </CardHeader>
+
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Order #</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredOrders.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    No orders found
-                  </TableCell>
+                  <TableHead>Order #</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Items</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ) : (
-                filteredOrders.map((order) => (
-                  <Collapsible
-                    key={order.id}
-                    open={expandedOrder === order.id}
-                    onOpenChange={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
-                    asChild
-                  >
-                    <>
-                      <TableRow className="cursor-pointer hover:bg-muted/50">
-                        <TableCell className="font-mono font-bold">
-                          <div className="flex items-center gap-2">
-                            <CollapsibleTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                                {expandedOrder === order.id ? (
-                                  <ChevronUp className="h-4 w-4" />
-                                ) : (
-                                  <ChevronDown className="h-4 w-4" />
-                                )}
+              </TableHeader>
+              <TableBody>
+                {filteredOrders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      No orders found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredOrders.map((order) => {
+                    const expanded = expandedOrderId === order.id;
+
+                    return (
+                      <Fragment key={order.id}>
+                        <TableRow key={order.id} className="hover:bg-muted/20">
+                          <TableCell className="font-mono font-semibold">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => setExpandedOrderId(expanded ? null : order.id)}
+                                aria-label={expanded ? "Collapse order details" : "Expand order details"}
+                              >
+                                {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                               </Button>
-                            </CollapsibleTrigger>
-                            #{order.order_number}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">
-                              {order.profiles?.full_name || 'N/A'}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {order.profiles?.email || 'N/A'}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(order.created_at).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          {order.total_amount > 0 ? `₹${Number(order.total_amount).toLocaleString()}` : 'Bulk Order'}
-                        </TableCell>
-                        <TableCell className="max-w-[200px]">
-                          <div className="truncate">{order.shipping_address.split('\n')[0]}</div>
-                          <div className="text-xs text-muted-foreground">Click arrow to view full address</div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(order.status)}>
-                            {order.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <select
-                            className="text-sm border rounded px-2 py-1 bg-background"
-                            value={order.status}
-                            onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                          >
-                            <option value="pending">Pending</option>
-                            <option value="processing">Processing</option>
-                            <option value="shipped">Shipped</option>
-                            <option value="delivered">Delivered</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
-                        </TableCell>
-                      </TableRow>
-                      <CollapsibleContent asChild>
-                        <TableRow>
-                          <TableCell colSpan={7} className="bg-muted/30 border-l-4 border-l-primary">
-                            <div className="py-3 space-y-3">
-                              <div>
-                                <div className="font-semibold text-sm mb-1">Full Shipping Address:</div>
-                                <div className="text-sm text-muted-foreground whitespace-pre-line">
-                                  {order.shipping_address}
-                                </div>
-                              </div>
-                              {order.status === 'cancelled' && (
-                                <div className="pt-2 border-t">
-                                  <div className="font-semibold text-red-600 mb-1">
-                                    Cancelled by: {order.cancelled_by === 'admin' ? 'Admin' : 'Customer'}
-                                  </div>
-                                  {order.cancelled_by === 'customer' && order.cancellation_reason && (
-                                    <div className="text-sm text-muted-foreground">
-                                      <span className="font-medium">Reason:</span> {order.cancellation_reason}
-                                    </div>
-                                  )}
-                                  {order.cancelled_by === 'admin' && (
-                                    <div className="text-sm text-muted-foreground italic">
-                                      Order was cancelled by administrator
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                              #{order.order_number}
                             </div>
                           </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <UserRound className="w-4 h-4 text-muted-foreground" />
+                              <div>
+                                <div className="font-medium">{order.customer_name}</div>
+                                <div className="text-sm text-muted-foreground">{order.customer_email}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
+                          <TableCell>{order.total_amount > 0 ? `₹${order.total_amount.toLocaleString()}` : "Bulk Order"}</TableCell>
+                          <TableCell>{order.order_items.length}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={getStatusColor(order.status)}>
+                              {order.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <select
+                              className="text-sm border rounded px-2 py-1 bg-background"
+                              value={order.status}
+                              disabled={updatingOrderId === order.id}
+                              onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="processing">Processing</option>
+                              <option value="shipped">Shipped</option>
+                              <option value="delivered">Delivered</option>
+                              <option value="cancelled">Cancelled</option>
+                            </select>
+                          </TableCell>
                         </TableRow>
-                      </CollapsibleContent>
-                      {/* Remove the old cancellation CollapsibleContent */}
-                      {/* The cancellation info is now included in the main CollapsibleContent above */}
-                    </>
-                  </Collapsible>
-                ))
-              )}
-            </TableBody>
-          </Table>
+
+                        {expanded && (
+                          <TableRow key={`${order.id}-details`}>
+                            <TableCell colSpan={7} className="bg-muted/20 border-l-4 border-l-primary">
+                              <div className="py-4 space-y-4">
+                                <div>
+                                  <p className="font-semibold text-sm mb-1">Shipping Address</p>
+                                  <p className="text-sm text-muted-foreground whitespace-pre-line">{order.shipping_address}</p>
+                                </div>
+
+                                {order.status === "cancelled" && (
+                                  <div className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+                                    <p>Cancelled by: {order.cancelled_by === "admin" ? "Admin" : "Customer"}</p>
+                                    {order.cancellation_reason && <p>Reason: {order.cancellation_reason}</p>}
+                                  </div>
+                                )}
+
+                                <div>
+                                  <p className="font-semibold text-sm mb-2">Ordered Items</p>
+                                  {order.order_items.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">No order items found for this order.</p>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      {order.order_items.map((item) => (
+                                        <div key={item.id} className="rounded-lg border bg-background p-3 flex items-center gap-3">
+                                          <img
+                                            src={item.product?.image_url || "/placeholder.svg"}
+                                            alt={item.product?.name || "Product"}
+                                            className="w-12 h-12 rounded-md object-cover border"
+                                          />
+                                          <div className="flex-1 min-w-0">
+                                            <p className="font-medium truncate">{item.product?.name || "Unknown product"}</p>
+                                            <p className="text-xs text-muted-foreground truncate">{item.product?.slug || "N/A"}</p>
+                                          </div>
+                                          <div className="text-right text-sm">
+                                            <p>
+                                              Qty: <span className="font-medium">{item.quantity}</span>
+                                            </p>
+                                            <p className="text-muted-foreground">₹{item.price_at_purchase.toLocaleString()}</p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

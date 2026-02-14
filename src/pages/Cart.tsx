@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Trash2, Plus, Minus } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import PageHero from "@/components/layout/PageHero";
 
 interface CartItem {
   id: string;
@@ -25,20 +26,18 @@ const Cart = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchCart();
-  }, []);
-
-  const fetchCart = async () => {
+  const fetchCart = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
-        navigate('/login');
+        navigate("/login");
         return;
       }
 
       const { data, error } = await supabase
-        .from('cart_items')
+        .from("cart_items")
         .select(`
           id,
           quantity,
@@ -50,12 +49,11 @@ const Cart = () => {
             image_url
           )
         `)
-        .eq('user_id', user.id);
+        .eq("user_id", user.id);
 
       if (error) throw error;
-      setCartItems(data as unknown as CartItem[]);
-    } catch (error) {
-      console.error('Error fetching cart:', error);
+      setCartItems((data as unknown as CartItem[]) || []);
+    } catch {
       toast({
         title: "Error",
         description: "Failed to load cart",
@@ -64,21 +62,20 @@ const Cart = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, toast]);
+
+  useEffect(() => {
+    fetchCart();
+  }, [fetchCart]);
 
   const updateQuantity = async (itemId: string, newQuantity: number) => {
     if (newQuantity < 1) return;
 
     try {
-      const { error } = await supabase
-        .from('cart_items')
-        .update({ quantity: newQuantity })
-        .eq('id', itemId);
-
+      const { error } = await supabase.from("cart_items").update({ quantity: newQuantity }).eq("id", itemId);
       if (error) throw error;
       fetchCart();
-    } catch (error) {
-      console.error('Error updating quantity:', error);
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update quantity",
@@ -89,19 +86,11 @@ const Cart = () => {
 
   const removeItem = async (itemId: string) => {
     try {
-      const { error } = await supabase
-        .from('cart_items')
-        .delete()
-        .eq('id', itemId);
-
+      const { error } = await supabase.from("cart_items").delete().eq("id", itemId);
       if (error) throw error;
       fetchCart();
-      toast({
-        title: "Removed",
-        description: "Item removed from cart",
-      });
-    } catch (error) {
-      console.error('Error removing item:', error);
+      toast({ title: "Removed", description: "Item removed from cart" });
+    } catch {
       toast({
         title: "Error",
         description: "Failed to remove item",
@@ -110,11 +99,10 @@ const Cart = () => {
     }
   };
 
-  const calculateTotal = () => {
-    return cartItems.reduce((total, item) => {
-      return total + (item.product.price * item.quantity);
-    }, 0);
-  };
+  const total = useMemo(
+    () => cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
+    [cartItems]
+  );
 
   if (loading) {
     return (
@@ -131,12 +119,12 @@ const Cart = () => {
     <div className="min-h-screen bg-background">
       <Navigation />
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Shopping Cart</h1>
+        <PageHero title="Shopping Cart" description="Review selected items and proceed to secure checkout." />
 
         {cartItems.length === 0 ? (
-          <Card className="bg-gradient-card">
-            <CardContent className="p-8 text-center">
-              <p className="text-muted-foreground mb-4">Your cart is empty</p>
+          <Card className="border-border/60 shadow-sm">
+            <CardContent className="p-10 text-center space-y-4">
+              <p className="text-muted-foreground">Your cart is empty.</p>
               <Button asChild>
                 <Link to="/shop">Continue Shopping</Link>
               </Button>
@@ -146,45 +134,26 @@ const Cart = () => {
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-4">
               {cartItems.map((item) => (
-                <Card key={item.id} className="bg-gradient-card">
+                <Card key={item.id} className="border-border/60 shadow-sm">
                   <CardContent className="p-4">
                     <div className="flex gap-4">
-                      <img
-                        src={item.product.image_url || '/placeholder.svg'}
-                        alt={item.product.name}
-                        className="w-24 h-24 object-cover rounded"
-                      />
+                      <img src={item.product.image_url || "/placeholder.svg"} alt={item.product.name} className="w-24 h-24 object-cover rounded" />
                       <div className="flex-1">
-                        <h3 className="font-semibold text-foreground">{item.product.name}</h3>
+                        <h3 className="font-semibold">{item.product.name}</h3>
                         <p className="text-sm text-muted-foreground">{item.product.slug}</p>
-                        <div className="mt-2">
-                          <p className="font-bold text-foreground">
-                            ₹{item.product.price.toLocaleString()}
-                          </p>
-                        </div>
+                        <p className="font-bold mt-2">₹{item.product.price.toLocaleString()}</p>
                       </div>
+
                       <div className="flex flex-col items-end justify-between">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeItem(item.id)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => removeItem(item.id)}>
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          >
+                          <Button variant="outline" size="icon" onClick={() => updateQuantity(item.id, item.quantity - 1)}>
                             <Minus className="w-4 h-4" />
                           </Button>
                           <span className="w-8 text-center">{item.quantity}</span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          >
+                          <Button variant="outline" size="icon" onClick={() => updateQuantity(item.id, item.quantity + 1)}>
                             <Plus className="w-4 h-4" />
                           </Button>
                         </div>
@@ -196,24 +165,18 @@ const Cart = () => {
             </div>
 
             <div>
-              <Card className="bg-gradient-card sticky top-24">
-                <CardContent className="p-6">
-                  <h2 className="text-xl font-bold mb-4 text-foreground">Order Summary</h2>
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Subtotal</span>
-                      <span>₹{calculateTotal().toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between font-bold text-foreground text-lg pt-2 border-t">
-                      <span>Total</span>
-                      <span>₹{calculateTotal().toLocaleString()}</span>
-                    </div>
+              <Card className="sticky top-24 border-border/60 shadow-sm">
+                <CardContent className="p-6 space-y-4">
+                  <h2 className="text-xl font-semibold">Order Total</h2>
+                  <div className="flex justify-between text-sm">
+                    <span>Items ({cartItems.length})</span>
+                    <span>₹{total.toLocaleString()}</span>
                   </div>
-                  <Button asChild className="w-full" size="lg">
-                    <Link to="/checkout">
-                      Proceed to Checkout
-                    </Link>
-                  </Button>
+                  <div className="border-t pt-3 flex justify-between font-semibold text-lg">
+                    <span>Total</span>
+                    <span>₹{total.toLocaleString()}</span>
+                  </div>
+                  <Button className="w-full" onClick={() => navigate("/checkout")}>Proceed to Checkout</Button>
                 </CardContent>
               </Card>
             </div>
