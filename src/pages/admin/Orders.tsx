@@ -3,100 +3,79 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Search, ChevronDown, ChevronUp, UserRound, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type RawProfile =
-  | {
-      full_name: string | null;
-      email: string | null;
-    }
-  | {
-      full_name: string | null;
-      email: string | null;
-    }[]
-  | null;
+type ProfileJoin = { full_name: string | null; email: string | null } | { full_name: string | null; email: string | null }[] | null;
 
-interface RawOrder {
+type OrderRow = {
   id: string;
   order_number: string | null;
   created_at: string;
-  status: string;
-  total_amount: number;
+  status: string | null;
+  total_amount: number | null;
   shipping_address: string | null;
   user_id: string;
-  cancelled_by?: string | null;
-  cancellation_reason?: string | null;
-  profiles: RawProfile;
-}
+  cancelled_by: string | null;
+  cancellation_reason: string | null;
+  profiles: ProfileJoin;
+};
 
-interface OrderItemRow {
+type OrderItemRow = {
   id: string;
   order_id: string;
   quantity: number;
   price_at_purchase: number;
   product_id: string;
-}
+};
 
-interface ProductLite {
+type ProductRow = {
   id: string;
   name: string | null;
   slug: string | null;
   image_url: string | null;
-}
+};
 
-interface OrderItem {
+type OrderItem = {
   id: string;
   order_id: string;
   quantity: number;
   price_at_purchase: number;
-  product: ProductLite | null;
-}
+  product: ProductRow | null;
+};
 
-interface Order {
+type OrderView = {
   id: string;
   order_number: string;
   created_at: string;
   status: string;
   total_amount: number;
   shipping_address: string;
-  user_id: string;
   cancelled_by: string | null;
   cancellation_reason: string | null;
   customer_name: string;
   customer_email: string;
-  order_items: OrderItem[];
-}
-
-const getStatusColor = (status: string) => {
-  const colors: Record<string, string> = {
-    pending: "bg-amber-500/15 text-amber-700 border-amber-500/30",
-    processing: "bg-sky-500/15 text-sky-700 border-sky-500/30",
-    shipped: "bg-violet-500/15 text-violet-700 border-violet-500/30",
-    delivered: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
-    cancelled: "bg-rose-500/15 text-rose-700 border-rose-500/30",
-  };
-
-  return colors[status] || "bg-muted text-foreground border-border";
+  items: OrderItem[];
 };
 
-const normalizeProfile = (profile: RawProfile) => {
+const statusClasses: Record<string, string> = {
+  pending: "bg-amber-500/15 text-amber-700 border-amber-500/30",
+  processing: "bg-sky-500/15 text-sky-700 border-sky-500/30",
+  shipped: "bg-violet-500/15 text-violet-700 border-violet-500/30",
+  delivered: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
+  cancelled: "bg-rose-500/15 text-rose-700 border-rose-500/30",
+};
+
+const normalizeProfile = (profile: ProfileJoin) => {
   if (!profile) return { full_name: null, email: null };
   if (Array.isArray(profile)) return profile[0] || { full_name: null, email: null };
   return profile;
 };
 
 const Orders = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderView[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,38 +85,40 @@ const Orders = () => {
   const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: rawOrders, error: ordersError } = await supabase
+      const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .select("id, order_number, created_at, status, total_amount, shipping_address, user_id, cancelled_by, cancellation_reason, profiles(full_name, email)")
         .order("created_at", { ascending: false });
 
-      if (ordersError) throw ordersError;
+      if (orderError) throw orderError;
 
-      const ordersList: RawOrder[] = (rawOrders as RawOrder[]) || [];
-      const orderIds = ordersList.map((o) => o.id);
+      const baseOrders = (orderData as OrderRow[]) || [];
+      const orderIds = baseOrders.map((o) => o.id);
 
       let itemsByOrderId: Record<string, OrderItem[]> = {};
+
       if (orderIds.length > 0) {
-        const { data: rawItems, error: itemsError } = await supabase
+        const { data: itemData, error: itemError } = await supabase
           .from("order_items")
           .select("id, order_id, quantity, price_at_purchase, product_id")
           .in("order_id", orderIds);
 
-        if (itemsError) throw itemsError;
+        if (itemError) throw itemError;
 
-        const itemRows: OrderItemRow[] = (rawItems as OrderItemRow[]) || [];
+        const itemRows = (itemData as OrderItemRow[]) || [];
         const productIds = [...new Set(itemRows.map((i) => i.product_id).filter(Boolean))];
 
-        let productsById: Record<string, ProductLite> = {};
+        let productsById: Record<string, ProductRow> = {};
+
         if (productIds.length > 0) {
-          const { data: productsData, error: productsError } = await supabase
+          const { data: productData, error: productError } = await supabase
             .from("products")
             .select("id, name, slug, image_url")
             .in("id", productIds);
 
-          if (productsError) throw productsError;
+          if (productError) throw productError;
 
-          productsById = ((productsData as ProductLite[]) || []).reduce<Record<string, ProductLite>>((acc, product) => {
+          productsById = ((productData as ProductRow[]) || []).reduce<Record<string, ProductRow>>((acc, product) => {
             acc[product.id] = product;
             return acc;
           }, {});
@@ -158,8 +139,9 @@ const Orders = () => {
         }, {});
       }
 
-      const normalizedOrders: Order[] = ordersList.map((order) => {
+      const mappedOrders: OrderView[] = baseOrders.map((order) => {
         const profile = normalizeProfile(order.profiles);
+
         return {
           id: order.id,
           order_number: order.order_number || "N/A",
@@ -167,23 +149,18 @@ const Orders = () => {
           status: order.status || "pending",
           total_amount: Number(order.total_amount) || 0,
           shipping_address: order.shipping_address || "Address not available",
-          user_id: order.user_id,
           cancelled_by: order.cancelled_by || null,
           cancellation_reason: order.cancellation_reason || null,
           customer_name: profile.full_name || "N/A",
           customer_email: profile.email || "N/A",
-          order_items: itemsByOrderId[order.id] || [],
+          items: itemsByOrderId[order.id] || [],
         };
       });
 
-      setOrders(normalizedOrders);
+      setOrders(mappedOrders);
     } catch (error) {
       console.error("Failed loading admin orders", error);
-      toast({
-        title: "Error",
-        description: "Failed to load orders.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to load orders.", variant: "destructive" });
       setOrders([]);
     } finally {
       setLoading(false);
@@ -207,27 +184,24 @@ const Orders = () => {
     });
   }, [orders, searchQuery]);
 
-  const updateOrderStatus = async (orderId: string, status: string) => {
+  const handleStatusChange = async (orderId: string, status: string) => {
     setUpdatingOrderId(orderId);
+
     try {
-      const patch: Record<string, string | null> = { status };
+      const payload: Record<string, string | null> = { status };
       if (status === "cancelled") {
-        patch.cancelled_by = "admin";
-        patch.cancellation_reason = null;
+        payload.cancelled_by = "admin";
+        payload.cancellation_reason = null;
       }
 
-      const { error } = await supabase.from("orders").update(patch).eq("id", orderId);
+      const { error } = await supabase.from("orders").update(payload).eq("id", orderId);
       if (error) throw error;
 
       toast({ title: "Order updated", description: "Order status saved successfully." });
       await loadOrders();
     } catch (error) {
       console.error("Failed updating order status", error);
-      toast({
-        title: "Error",
-        description: "Failed to update order status.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to update order status.", variant: "destructive" });
     } finally {
       setUpdatingOrderId(null);
     }
@@ -246,13 +220,14 @@ const Orders = () => {
             <CardTitle className="text-xl">All Orders</CardTitle>
             <Badge variant="outline">{filteredOrders.length} results</Badge>
           </div>
+
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
-              placeholder="Search by order #, customer name or email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
+              placeholder="Search by order #, customer name, or email..."
             />
           </div>
         </CardHeader>
@@ -275,6 +250,7 @@ const Orders = () => {
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {filteredOrders.length === 0 ? (
                   <TableRow>
@@ -288,7 +264,7 @@ const Orders = () => {
 
                     return (
                       <Fragment key={order.id}>
-                        <TableRow key={order.id} className="hover:bg-muted/20">
+                        <TableRow className="hover:bg-muted/20">
                           <TableCell className="font-mono font-semibold">
                             <div className="flex items-center gap-2">
                               <Button
@@ -303,29 +279,33 @@ const Orders = () => {
                               #{order.order_number}
                             </div>
                           </TableCell>
+
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <UserRound className="w-4 h-4 text-muted-foreground" />
+                              <UserRound className="h-4 w-4 text-muted-foreground" />
                               <div>
                                 <div className="font-medium">{order.customer_name}</div>
                                 <div className="text-sm text-muted-foreground">{order.customer_email}</div>
                               </div>
                             </div>
                           </TableCell>
+
                           <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
                           <TableCell>{order.total_amount > 0 ? `₹${order.total_amount.toLocaleString()}` : "Bulk Order"}</TableCell>
-                          <TableCell>{order.order_items.length}</TableCell>
+                          <TableCell>{order.items.length}</TableCell>
+
                           <TableCell>
-                            <Badge variant="outline" className={getStatusColor(order.status)}>
+                            <Badge variant="outline" className={statusClasses[order.status] || "bg-muted text-foreground border-border"}>
                               {order.status}
                             </Badge>
                           </TableCell>
+
                           <TableCell>
                             <select
                               className="text-sm border rounded px-2 py-1 bg-background"
                               value={order.status}
                               disabled={updatingOrderId === order.id}
-                              onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                              onChange={(e) => handleStatusChange(order.id, e.target.value)}
                             >
                               <option value="pending">Pending</option>
                               <option value="processing">Processing</option>
@@ -337,7 +317,7 @@ const Orders = () => {
                         </TableRow>
 
                         {expanded && (
-                          <TableRow key={`${order.id}-details`}>
+                          <TableRow>
                             <TableCell colSpan={7} className="bg-muted/20 border-l-4 border-l-primary">
                               <div className="py-4 space-y-4">
                                 <div>
@@ -354,11 +334,11 @@ const Orders = () => {
 
                                 <div>
                                   <p className="font-semibold text-sm mb-2">Ordered Items</p>
-                                  {order.order_items.length === 0 ? (
+                                  {order.items.length === 0 ? (
                                     <p className="text-sm text-muted-foreground">No order items found for this order.</p>
                                   ) : (
                                     <div className="space-y-2">
-                                      {order.order_items.map((item) => (
+                                      {order.items.map((item) => (
                                         <div key={item.id} className="rounded-lg border bg-background p-3 flex items-center gap-3">
                                           <img
                                             src={item.product?.image_url || "/placeholder.svg"}
