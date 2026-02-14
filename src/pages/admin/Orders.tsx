@@ -14,11 +14,29 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Search, ChevronDown, ChevronUp, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+
+interface OrderItemRow {
+  id: string;
+  order_id: string;
+  quantity: number;
+  price_at_purchase: number;
+  product_id: string;
+}
+
+interface ProductLite {
+  id: string;
+  name: string;
+  slug: string;
+  image_url: string | null;
+}
+
+interface OrderItem {
+  id: string;
+  order_id: string;
+  quantity: number;
+  price_at_purchase: number;
+  products: ProductLite | null;
+}
 
 interface OrderItem {
   id: string;
