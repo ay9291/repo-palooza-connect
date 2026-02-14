@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Navigation from "@/components/Navigation";
 import ReviewSection from "@/components/ReviewSection";
@@ -10,17 +10,9 @@ import WishlistButton from "@/components/WishlistButton";
 import SocialShare from "@/components/SocialShare";
 import StockNotification from "@/components/StockNotification";
 import ProductRecommendations from "@/components/ProductRecommendations";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/dialog";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import PageHero from "@/components/layout/PageHero";
 
 interface Product {
   id: string;
@@ -47,54 +39,39 @@ const ProductDetail = () => {
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (id) {
-      fetchProduct();
-    }
-  }, [id]);
-
-  const fetchProduct = async () => {
+  const fetchProduct = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', id)
-        .single();
-
+      const { data, error } = await supabase.from("products").select("*").eq("id", id).single();
       if (error) throw error;
       setProduct(data);
 
-      // Fetch product images
       const { data: images, error: imagesError } = await supabase
-        .from('product_images' as any)
-        .select('*')
-        .eq('product_id', id)
-        .order('display_order', { ascending: true });
+        .from("product_images" as never)
+        .select("id, image_url, display_order")
+        .eq("product_id", id)
+        .order("display_order", { ascending: true });
 
       if (imagesError) throw imagesError;
-      setProductImages((images || []) as unknown as ProductImage[]);
-    } catch (error) {
-      console.error('Error fetching product:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load product details",
-        variant: "destructive",
-      });
+      setProductImages((images as unknown as ProductImage[]) || []);
+    } catch {
+      toast({ title: "Error", description: "Failed to load product details", variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, toast]);
+
+  useEffect(() => {
+    if (id) fetchProduct();
+  }, [fetchProduct, id]);
 
   const handleAddToCart = async (redirectToCheckout = false) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     if (!user) {
-      toast({
-        title: "Login Required",
-        description: "Please login to add items to cart",
-        variant: "destructive",
-      });
-      navigate('/login');
+      toast({ title: "Login Required", description: "Please login to add items to cart", variant: "destructive" });
+      navigate("/login");
       return;
     }
 
@@ -102,56 +79,37 @@ const ProductDetail = () => {
 
     try {
       const { data: existing } = await supabase
-        .from('cart_items')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('product_id', product.id)
+        .from("cart_items")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("product_id", product.id)
         .maybeSingle();
 
       if (existing) {
-        const { error } = await supabase
-          .from('cart_items')
-          .update({ quantity: existing.quantity + 1 })
-          .eq('id', existing.id);
-
+        const { error } = await supabase.from("cart_items").update({ quantity: existing.quantity + 1 }).eq("id", existing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('cart_items')
-          .insert({
-            user_id: user.id,
-            product_id: product.id,
-            quantity: 1
-          });
-
+        const { error } = await supabase.from("cart_items").insert({ user_id: user.id, product_id: product.id, quantity: 1 });
         if (error) throw error;
       }
 
-      if (redirectToCheckout) {
-        navigate('/checkout');
-      } else {
-        toast({
-          title: "Added to Cart",
-          description: "Product added to your cart successfully",
-        });
-      }
-    } catch (error) {
-      console.error('Error adding to cart:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add product to cart",
-        variant: "destructive",
-      });
+      if (redirectToCheckout) navigate("/checkout");
+      else toast({ title: "Added to Cart", description: "Product added to your cart successfully" });
+    } catch {
+      toast({ title: "Error", description: "Failed to add product to cart", variant: "destructive" });
     }
   };
+
+  const galleryImages = useMemo(() => {
+    if (productImages.length > 0) return productImages.map((img) => img.image_url);
+    return product?.image_url ? [product.image_url] : ["/placeholder.svg"];
+  }, [product?.image_url, productImages]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
-        <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-[400px]">
-          <Loader2 className="w-8 h-8 animate-spin text-accent" />
-        </div>
+        <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-[400px]"><Loader2 className="w-8 h-8 animate-spin text-accent" /></div>
       </div>
     );
   }
@@ -160,9 +118,7 @@ const ProductDetail = () => {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
-        <div className="container mx-auto px-4 py-8">
-          <p className="text-center text-muted-foreground">Product not found</p>
-        </div>
+        <div className="container mx-auto px-4 py-8"><p className="text-center text-muted-foreground">Product not found</p></div>
       </div>
     );
   }
@@ -171,133 +127,92 @@ const ProductDetail = () => {
     <div className="min-h-screen bg-background">
       <Navigation />
       <div className="container mx-auto px-4 py-8">
-        <Button variant="ghost" onClick={() => navigate('/shop')} className="mb-6">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Shop
-        </Button>
+        <PageHero
+          title={product.name}
+          description={product.description || "High-quality engineered furniture crafted for modern spaces."}
+          action={
+            <Button variant="ghost" onClick={() => navigate("/shop")}>
+              <ArrowLeft className="w-4 h-4 mr-2" /> Back to Shop
+            </Button>
+          }
+        />
 
-        <div className="grid md:grid-cols-2 gap-8 mb-12">
-          <div>
-            {productImages.length > 0 ? (
-              <Carousel className="w-full">
-                <CarouselContent>
-                  {productImages.map((image) => (
-                    <CarouselItem key={image.id}>
-                      <div className="relative group">
-                        <img
-                          src={image.image_url}
-                          alt={product.name}
-                          className="w-full rounded-lg shadow-lg aspect-square object-contain bg-muted cursor-zoom-in"
-                          onClick={() => setZoomedImage(image.image_url)}
-                        />
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => setZoomedImage(image.image_url)}
-                        >
-                          <ZoomIn className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-                <CarouselPrevious className="left-2" />
-                <CarouselNext className="right-2" />
-              </Carousel>
-            ) : (
-              <div className="relative group">
-                <img
-                  src={product.image_url || '/placeholder.svg'}
-                  alt={product.name}
-                  className="w-full rounded-lg shadow-lg aspect-square object-contain bg-muted cursor-zoom-in"
-                  onClick={() => setZoomedImage(product.image_url || '/placeholder.svg')}
-                />
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => setZoomedImage(product.image_url || '/placeholder.svg')}
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
-          </div>
+        <div className="grid lg:grid-cols-2 gap-10 mb-12">
+          <Card className="border-border/60 shadow-sm p-4">
+            <Carousel className="w-full">
+              <CarouselContent>
+                {galleryImages.map((image, idx) => (
+                  <CarouselItem key={`${image}-${idx}`}>
+                    <div className="relative group">
+                      <img
+                        src={image}
+                        alt={product.name}
+                        className="w-full rounded-xl aspect-square object-contain bg-muted/30 cursor-zoom-in"
+                        onClick={() => setZoomedImage(image)}
+                      />
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => setZoomedImage(image)}
+                      >
+                        <ZoomIn className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              <CarouselPrevious />
+              <CarouselNext />
+            </Carousel>
+          </Card>
 
           <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">{product.name}</h1>
-              <p className="text-sm text-muted-foreground mb-4">Model: {product.slug}</p>
-              <p className="text-3xl font-bold text-accent">₹{Number(product.price).toLocaleString()}</p>
-            </div>
-
-            {product.description && (
-              <div>
-                <h2 className="text-xl font-semibold mb-2">Description</h2>
-                <p className="text-muted-foreground">{product.description}</p>
+            <div className="rounded-2xl border border-border/60 p-6 bg-card space-y-4 shadow-sm">
+              <p className="text-sm text-muted-foreground">Model: {product.slug}</p>
+              <div className="flex items-end gap-2">
+                <span className="text-3xl font-semibold">₹{product.price.toLocaleString()}</span>
+                <span className="text-sm text-muted-foreground">inclusive pricing</span>
               </div>
-            )}
+              <BadgeStock qty={product.stock_quantity} />
 
-            <div>
-              <p className="text-sm text-muted-foreground">
-                Stock: {product.stock_quantity} units available
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <div className="flex gap-3">
-                <Button
-                  onClick={() => handleAddToCart(true)}
-                  size="lg"
-                  className="flex-1"
-                  disabled={product.stock_quantity === 0}
-                >
-                  {product.stock_quantity === 0 ? 'Out of Stock' : 'Buy Now'}
+              <div className="flex flex-wrap gap-3 pt-2">
+                <Button size="lg" className="gap-2" onClick={() => handleAddToCart(false)}>
+                  <ShoppingCart className="w-4 h-4" /> Add to Cart
                 </Button>
-                <Button
-                  onClick={() => handleAddToCart(false)}
-                  size="lg"
-                  variant="outline"
-                  className="flex-1"
-                  disabled={product.stock_quantity === 0}
-                >
-                  <ShoppingCart className="w-5 h-5 mr-2" />
-                  Add to Cart
+                <Button size="lg" variant="outline" onClick={() => handleAddToCart(true)}>
+                  Buy Now
                 </Button>
-              </div>
-              
-              {product.stock_quantity === 0 && (
-                <StockNotification productId={product.id} productName={product.name} />
-              )}
-
-              <div className="flex gap-3 justify-center">
                 <WishlistButton productId={product.id} />
-                <SocialShare title={product.name} />
               </div>
             </div>
+
+            <StockNotification productId={product.id} stockQuantity={product.stock_quantity} />
+            <SocialShare productName={product.name} productUrl={window.location.href} />
           </div>
         </div>
 
         <ReviewSection productId={product.id} />
-        
-        <ProductRecommendations currentProductId={product.id} />
+        <ProductRecommendations currentProductId={product.id} categoryId={null} />
       </div>
 
-      {/* Image Zoom Dialog */}
       <Dialog open={!!zoomedImage} onOpenChange={() => setZoomedImage(null)}>
-        <DialogContent className="max-w-4xl w-full p-0">
-          <div className="relative w-full h-[80vh]">
-            <img
-              src={zoomedImage || ''}
-              alt="Zoomed product"
-              className="w-full h-full object-contain"
-            />
-          </div>
+        <DialogContent className="max-w-4xl p-2">
+          {zoomedImage && <img src={zoomedImage} alt={product.name} className="w-full h-auto rounded-lg" />}
         </DialogContent>
       </Dialog>
     </div>
   );
 };
+
+const BadgeStock = ({ qty }: { qty: number }) => (
+  <span
+    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+      qty > 10 ? "bg-emerald-500/15 text-emerald-700" : qty > 0 ? "bg-amber-500/15 text-amber-700" : "bg-rose-500/15 text-rose-700"
+    }`}
+  >
+    {qty > 0 ? `${qty} in stock` : "Out of stock"}
+  </span>
+);
 
 export default ProductDetail;
