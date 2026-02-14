@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,18 @@ interface OrderItem {
   quantity: number;
   price_at_purchase: number;
   products: ProductLite | null;
+}
+
+interface OrderItem {
+  id: string;
+  order_id: string;
+  quantity: number;
+  price_at_purchase: number;
+  products: {
+    name: string;
+    slug: string;
+    image_url: string | null;
+  } | null;
 }
 
 interface Order {
@@ -83,46 +95,25 @@ const Orders = () => {
       const orderIds = safeOrders.map((order) => order.id);
 
       let itemsByOrderId: Record<string, OrderItem[]> = {};
-
       if (orderIds.length > 0) {
-        const { data: itemRows, error: itemsError } = await supabase
+        const { data: itemsData, error: itemsError } = await supabase
           .from("order_items")
-          .select("id, order_id, quantity, price_at_purchase, product_id")
+          .select(`
+            id,
+            order_id,
+            quantity,
+            price_at_purchase,
+            products(name, slug, image_url)
+          `)
           .in("order_id", orderIds);
 
         if (itemsError) throw itemsError;
 
-        const orderItemRows = (itemRows as OrderItemRow[]) || [];
-        const productIds = [...new Set(orderItemRows.map((item) => item.product_id))];
-
-        let productsById: Record<string, ProductLite> = {};
-        if (productIds.length > 0) {
-          const { data: productsData, error: productsError } = await supabase
-            .from("products")
-            .select("id, name, slug, image_url")
-            .in("id", productIds);
-
-          if (productsError) throw productsError;
-
-          productsById = ((productsData as ProductLite[]) || []).reduce<Record<string, ProductLite>>((acc, p) => {
-            acc[p.id] = p;
-            return acc;
-          }, {});
-        }
-
-        itemsByOrderId = orderItemRows.reduce<Record<string, OrderItem[]>>((acc, item) => {
-          const mapped: OrderItem = {
-            id: item.id,
-            order_id: item.order_id,
-            quantity: item.quantity,
-            price_at_purchase: item.price_at_purchase,
-            products: productsById[item.product_id] || null,
-          };
-
+        itemsByOrderId = ((itemsData as OrderItem[]) || []).reduce<Record<string, OrderItem[]>>((acc, item) => {
           if (!acc[item.order_id]) {
             acc[item.order_id] = [];
           }
-          acc[item.order_id].push(mapped);
+          acc[item.order_id].push(item);
           return acc;
         }, {});
       }
@@ -236,23 +227,26 @@ const Orders = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredOrders.map((order) => {
-                  const isExpanded = expandedOrder === order.id;
-
-                  return (
-                    <Fragment key={order.id}>
+                filteredOrders.map((order) => (
+                  <Collapsible
+                    key={order.id}
+                    open={expandedOrder === order.id}
+                    onOpenChange={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
+                    asChild
+                  >
+                    <>
                       <TableRow className="hover:bg-muted/30">
                         <TableCell className="font-mono font-semibold">
                           <div className="flex items-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 w-6 p-0"
-                              onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
-                              aria-label={isExpanded ? "Collapse order details" : "Expand order details"}
-                            >
-                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </Button>
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                {expandedOrder === order.id ? (
+                                  <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </CollapsibleTrigger>
                             #{order.order_number || "N/A"}
                           </div>
                         </TableCell>
@@ -290,7 +284,7 @@ const Orders = () => {
                         </TableCell>
                       </TableRow>
 
-                      {isExpanded && (
+                      <CollapsibleContent asChild>
                         <TableRow>
                           <TableCell colSpan={7} className="bg-muted/20 border-l-4 border-l-primary">
                             <div className="py-4 space-y-4">
@@ -298,13 +292,6 @@ const Orders = () => {
                                 <p className="font-semibold text-sm mb-1">Shipping Address</p>
                                 <p className="text-sm text-muted-foreground whitespace-pre-line">{order.shipping_address}</p>
                               </div>
-
-                              {order.status === "cancelled" && (
-                                <div className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-                                  <p>Cancelled by: {order.cancelled_by === "admin" ? "Admin" : "Customer"}</p>
-                                  {order.cancellation_reason && <p>Reason: {order.cancellation_reason}</p>}
-                                </div>
-                              )}
 
                               <div>
                                 <p className="font-semibold text-sm mb-2">Ordered Items</p>
@@ -322,9 +309,7 @@ const Orders = () => {
                                           <p className="text-xs text-muted-foreground truncate">{item.products?.slug || "N/A"}</p>
                                         </div>
                                         <div className="text-right text-sm">
-                                          <p>
-                                            Qty: <span className="font-medium">{item.quantity}</span>
-                                          </p>
+                                          <p>Qty: <span className="font-medium">{item.quantity}</span></p>
                                           <p className="text-muted-foreground">₹{Number(item.price_at_purchase).toLocaleString()}</p>
                                         </div>
                                       </div>
@@ -337,10 +322,10 @@ const Orders = () => {
                             </div>
                           </TableCell>
                         </TableRow>
-                      )}
-                    </Fragment>
-                  );
-                })
+                      </CollapsibleContent>
+                    </>
+                  </Collapsible>
+                ))
               )}
             </TableBody>
           </Table>
