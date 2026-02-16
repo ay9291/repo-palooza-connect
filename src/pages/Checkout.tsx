@@ -11,6 +11,7 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PageHero from "@/components/layout/PageHero";
 import { calculateCheckoutTotals } from "@/lib/checkout-pricing";
+import { evaluateCoupon, getShippingAmount, performFraudScreening, validateShippingAddress } from "@/lib/checkout-engine";
 
 interface CartItem {
   id: string;
@@ -31,40 +32,49 @@ interface ShippingAddress {
   phone: string;
 }
 
-const COUPONS: Record<string, number> = {
-  WELCOME10: 10,
-  SAVE5: 5,
+const DEFAULT_ADDRESS: ShippingAddress = {
+  fullName: "",
+  street: "",
+  city: "",
+  state: "",
+  zipCode: "",
+  phone: "",
 };
 
-const SHIPPING_FLAT = 149;
 const TAX_RATE = 0.18;
 
 const Checkout = () => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
-    fullName: "",
-    street: "",
-    city: "",
-    state: "",
-    zipCode: "",
-    phone: "",
-  });
+  const [shippingAddress, setShippingAddress] = useState<ShippingAddress>(DEFAULT_ADDRESS);
+  const [savedAddresses, setSavedAddresses] = useState<ShippingAddress[]>([]);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState("cod");
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [shippingTier, setShippingTier] = useState("standard");
   const { toast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchCart();
-    const saved = localStorage.getItem("checkout-default-address");
-    if (saved) {
+    const rawDefaultAddress = localStorage.getItem("checkout-default-address");
+    const rawSavedAddresses = localStorage.getItem("checkout-saved-addresses");
+
+    if (rawDefaultAddress) {
       try {
-        setShippingAddress(JSON.parse(saved) as ShippingAddress);
+        setShippingAddress(JSON.parse(rawDefaultAddress) as ShippingAddress);
       } catch {
-        // ignore malformed local storage data
+        setShippingAddress(DEFAULT_ADDRESS);
+      }
+    }
+
+    if (rawSavedAddresses) {
+      try {
+        setSavedAddresses(JSON.parse(rawSavedAddresses) as ShippingAddress[]);
+      } catch {
+        setSavedAddresses([]);
       }
     }
   }, []);
@@ -103,45 +113,56 @@ const Checkout = () => {
 
   const subtotal = useMemo(
     () => cartItems.reduce((total, item) => total + item.product.price * item.quantity, 0),
-    [cartItems]
+    [cartItems],
   );
-  const discountPercent = appliedCoupon ? COUPONS[appliedCoupon] || 0 : 0;
+
+  const shippingAmount = useMemo(
+    () => getShippingAmount({ subtotal, shippingTier }),
+    [shippingTier, subtotal],
+  );
+
   const pricing = calculateCheckoutTotals({
     subtotal,
-    discountPercent,
+    discountPercent: subtotal > 0 ? (discountAmount / subtotal) * 100 : 0,
     taxRate: TAX_RATE,
-    shippingFlat: cartItems.length > 0 ? SHIPPING_FLAT : 0,
+    shippingFlat: shippingAmount,
   });
-  const discountAmount = pricing.discountAmount;
+
   const taxAmount = pricing.taxAmount;
-  const shippingAmount = pricing.shippingAmount;
   const finalTotal = pricing.total;
 
   const handleApplyCoupon = () => {
-    const normalized = couponCode.trim().toUpperCase();
-    if (!normalized) {
-      toast({ title: "Coupon", description: "Enter a coupon code first." });
+    const evaluation = evaluateCoupon(couponCode, subtotal);
+    if (!evaluation.ok) {
+      toast({ title: "Coupon", description: evaluation.message, variant: "destructive" });
       return;
     }
 
-    if (!COUPONS[normalized]) {
-      toast({ title: "Invalid coupon", description: "This coupon is not valid.", variant: "destructive" });
+    setAppliedCoupon(evaluation.code || null);
+    setDiscountAmount(evaluation.discountAmount || 0);
+    toast({ title: "Coupon applied", description: evaluation.message });
+  };
+
+  const saveAddress = () => {
+    const validation = validateShippingAddress(shippingAddress);
+    if (!validation.ok) {
+      toast({ title: "Invalid address", description: validation.message, variant: "destructive" });
       return;
     }
 
-    setAppliedCoupon(normalized);
-    toast({ title: "Coupon applied", description: `${COUPONS[normalized]}% discount has been applied.` });
+    const next = [...savedAddresses, shippingAddress];
+    setSavedAddresses(next);
+    localStorage.setItem("checkout-saved-addresses", JSON.stringify(next));
+    localStorage.setItem("checkout-default-address", JSON.stringify(shippingAddress));
+    toast({ title: "Address saved", description: "Address has been added to your saved addresses." });
   };
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (Object.values(shippingAddress).some((val) => !val.trim())) {
-      toast({
-        title: "Error",
-        description: "Please fill in all shipping address fields",
-        variant: "destructive",
-      });
+    const validation = validateShippingAddress(shippingAddress);
+    if (!validation.ok) {
+      toast({ title: "Checkout blocked", description: validation.message, variant: "destructive" });
       return;
     }
 
@@ -151,6 +172,12 @@ const Checkout = () => {
         description: "Your cart is empty",
         variant: "destructive",
       });
+      return;
+    }
+
+    const fraudCheck = performFraudScreening({ subtotal, shippingAddress, paymentMethod });
+    if (!fraudCheck.approved) {
+      toast({ title: "Manual verification required", description: fraudCheck.message, variant: "destructive" });
       return;
     }
 
@@ -194,35 +221,9 @@ const Checkout = () => {
       const { error: deleteError } = await supabase.from("cart_items").delete().eq("user_id", user.id);
       if (deleteError) throw deleteError;
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("id", user.id)
-        .single();
-
-      try {
-        await supabase.functions.invoke("send-order-email", {
-          body: {
-            customerEmail: profile?.email || user.email,
-            customerName: profile?.full_name || "Customer",
-            orderNumber: orderData.order_number,
-            orderId: orderData.id,
-            totalAmount: Number(finalTotal.toFixed(2)),
-            shippingAddress: formattedAddress,
-            items: cartItems.map((item) => ({
-              name: item.product.name,
-              quantity: item.quantity,
-              price: item.product.price,
-            })),
-          },
-        });
-      } catch {
-        // Do not fail checkout for email dispatch issues
-      }
-
       toast({
         title: "Order placed",
-        description: `Payment: ${paymentMethod.toUpperCase()} · Order #${orderData.order_number}`,
+        description: `Payment: ${paymentMethod.toUpperCase()} · Tier: ${shippingTier} · Order #${orderData.order_number}`,
       });
 
       navigate("/orders");
@@ -270,7 +271,7 @@ const Checkout = () => {
       <div className="container mx-auto px-4 py-8">
         <PageHero
           title="Secure Checkout"
-          description="Fast checkout with transparent tax, shipping, discounts, and secure payment preference selection."
+          description="Enterprise checkout with validation, fraud checks, smart discounts, and tiered shipping calculator."
           action={
             <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-muted-foreground">
               <ShieldCheck className="w-4 h-4 text-accent" />
@@ -278,6 +279,14 @@ const Checkout = () => {
             </div>
           }
         />
+
+        <div className="mb-6 flex flex-wrap gap-2">
+          {["Address", "Payment", "Review"].map((step, idx) => (
+            <div key={step} className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs">
+              <span className="font-semibold">{idx + 1}</span>{step}
+            </div>
+          ))}
+        </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
@@ -287,6 +296,24 @@ const Checkout = () => {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handlePlaceOrder} className="space-y-5">
+                  {savedAddresses.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Saved Address</Label>
+                      <Select onValueChange={(value) => setShippingAddress(savedAddresses[Number(value)])}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a saved address" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {savedAddresses.map((address, index) => (
+                            <SelectItem key={`${address.phone}-${index}`} value={String(index)}>
+                              {address.fullName} · {address.city}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="fullName">Full Name *</Label>
@@ -314,6 +341,23 @@ const Checkout = () => {
                     </div>
                   </div>
 
+                  <div className="flex justify-end">
+                    <Button type="button" variant="outline" onClick={saveAddress}>Save address</Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Delivery Tier</Label>
+                    <Select value={shippingTier} onValueChange={setShippingTier}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose delivery speed" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standard">Standard (2-5 days)</SelectItem>
+                        <SelectItem value="express">Express (next day where available)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <div className="space-y-2">
                     <Label>Payment Method</Label>
                     <Select value={paymentMethod} onValueChange={setPaymentMethod}>
@@ -321,9 +365,10 @@ const Checkout = () => {
                         <SelectValue placeholder="Choose payment method" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="cod">Cash on Delivery</SelectItem>
-                        <SelectItem value="upi">UPI (collect on dispatch)</SelectItem>
+                        <SelectItem value="card">Card (recommended)</SelectItem>
+                        <SelectItem value="upi">UPI</SelectItem>
                         <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                        <SelectItem value="cod">Cash on Delivery</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -364,7 +409,7 @@ const Checkout = () => {
                     <Input id="coupon" placeholder="WELCOME10" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} />
                     <Button type="button" variant="outline" onClick={handleApplyCoupon}>Apply</Button>
                   </div>
-                  {appliedCoupon && <p className="text-xs text-emerald-600">Applied: {appliedCoupon} ({discountPercent}% off)</p>}
+                  {appliedCoupon && <p className="text-xs text-emerald-600">Applied: {appliedCoupon}</p>}
                 </div>
 
                 <div className="space-y-2 text-sm border-t pt-4">
