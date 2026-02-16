@@ -28,6 +28,9 @@ const Blog = lazy(() => import("./pages/Blog"));
 const BlogPost = lazy(() => import("./pages/BlogPost"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const LiveChat = lazy(() => import("./components/LiveChat"));
+const EnterpriseExperience = lazy(() => import("./features/commerce/pages/EnterpriseExperience"));
+const AdminControlCenter = lazy(() => import("./features/admin/pages/AdminControlCenter"));
+const DeliveryPartnerPortal = lazy(() => import("./features/delivery/pages/DeliveryPartnerPortal"));
 
 const queryClient = new QueryClient();
 
@@ -61,6 +64,9 @@ const App = () => (
               <Route path="showrooms" element={<Showrooms />} />
             </Route>
             <Route path="/showroom-dashboard" element={<ShowroomDashboard />} />
+            <Route path="/enterprise" element={<EnterpriseExperience />} />
+            <Route path="/admin/control-center" element={<AdminControlCenter />} />
+            <Route path="/delivery-portal" element={<DeliveryPartnerPortal />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <LiveChat />
