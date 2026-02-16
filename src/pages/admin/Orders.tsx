@@ -4,14 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Search, ChevronDown, ChevronUp, UserRound, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -81,7 +74,45 @@ interface OrderItem {
   } | null;
 }
 
-interface Order {
+type ProfileJoin = { full_name: string | null; email: string | null } | { full_name: string | null; email: string | null }[] | null;
+
+type OrderRow = {
+  id: string;
+  order_number: string | null;
+  created_at: string;
+  status: string | null;
+  total_amount: number | null;
+  shipping_address: string | null;
+  user_id: string;
+  cancelled_by: string | null;
+  cancellation_reason: string | null;
+  profiles: ProfileJoin;
+};
+
+type OrderItemRow = {
+  id: string;
+  order_id: string;
+  quantity: number;
+  price_at_purchase: number;
+  product_id: string;
+};
+
+type ProductRow = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  image_url: string | null;
+};
+
+type OrderItem = {
+  id: string;
+  order_id: string;
+  quantity: number;
+  price_at_purchase: number;
+  product: ProductRow | null;
+};
+
+type OrderView = {
   id: string;
   order_number: string | null;
   created_at: string;
@@ -121,7 +152,7 @@ const normalizeProfile = (profile: RawProfile) => {
 };
 
 const Orders = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderView[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -359,10 +390,10 @@ const Orders = () => {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
-              placeholder="Search by order #, customer name or email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
+              placeholder="Search by order #, customer name, or email..."
             />
           </div>
         </CardHeader>
