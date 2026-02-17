@@ -105,11 +105,11 @@ const Dashboard = () => {
     <div className="space-y-8">
       <div className="rounded-2xl border bg-gradient-to-r from-background via-background to-accent/10 p-6 md:p-8">
         <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-        <p className="text-muted-foreground">Your control center for operations and performance.</p>
+        <p className="text-muted-foreground">Your premium control center for operations and performance.</p>
         <div className="mt-4 flex gap-2 flex-wrap">
           <Button asChild variant="outline"><Link to="/admin/orders">Manage Orders</Link></Button>
           <Button asChild variant="outline"><Link to="/admin/products">Manage Products</Link></Button>
-          <Button asChild><Link to="/admin/control-center">Open Operations Console</Link></Button>
+          <Button asChild><Link to="/premium/admin">Open Premium Features Console</Link></Button>
         </div>
       </div>
 
@@ -176,7 +176,7 @@ const Dashboard = () => {
         <CardContent className="text-sm text-muted-foreground space-y-2">
           <p className="flex items-center gap-2"><ArrowUpRight className="w-4 h-4 text-accent" /> Keep pending orders under control to improve fulfillment velocity.</p>
           <p className="flex items-center gap-2"><ArrowUpRight className="w-4 h-4 text-accent" /> Review product catalog weekly to ensure top-sellers stay in stock.</p>
-          <p className="flex items-center gap-2"><ArrowUpRight className="w-4 h-4 text-accent" /> Use Operations Console for deeper analytics and system health checks.</p>
+          <p className="flex items-center gap-2"><ArrowUpRight className="w-4 h-4 text-accent" /> Use Premium Features Console for bulk pricing, CSV exports, and assignment automation.</p>
         </CardContent>
       </Card>
     </div>

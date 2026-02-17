@@ -20,7 +20,7 @@ const menuItems = [
   { title: "Orders", url: "/admin/orders", icon: ShoppingBag },
   { title: "Products", url: "/admin/products", icon: Package },
   { title: "Showrooms", url: "/admin/showrooms", icon: Store },
-  { title: "Operations Console", url: "/admin/control-center", icon: SlidersHorizontal },
+  { title: "Premium Console", url: "/premium/admin", icon: SlidersHorizontal },
 ];
 
 export function AdminSidebar() {
