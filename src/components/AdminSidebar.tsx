@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { Package, ShoppingBag, Store, LayoutDashboard, LogOut, Home, Sparkles } from "lucide-react";
+import { Package, ShoppingBag, Store, LayoutDashboard, LogOut, Home, Sparkles, SlidersHorizontal } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +20,7 @@ const menuItems = [
   { title: "Orders", url: "/admin/orders", icon: ShoppingBag },
   { title: "Products", url: "/admin/products", icon: Package },
   { title: "Showrooms", url: "/admin/showrooms", icon: Store },
+  { title: "Premium Console", url: "/premium/admin", icon: SlidersHorizontal },
 ];
 
 export function AdminSidebar() {
