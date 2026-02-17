@@ -43,7 +43,7 @@ export function AdminSidebar() {
             <div className="rounded-xl border bg-gradient-to-br from-background to-accent/10 p-3">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Sparkles className="w-4 h-4 text-accent" />
-                Premium Admin
+                Admin Console
               </div>
               <p className="text-xs text-muted-foreground mt-1">Manage orders, products and partners.</p>
             </div>
