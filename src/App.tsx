@@ -28,6 +28,17 @@ const Blog = lazy(() => import("./pages/Blog"));
 const BlogPost = lazy(() => import("./pages/BlogPost"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const LiveChat = lazy(() => import("./components/LiveChat"));
+const EnterpriseExperience = lazy(() => import("./features/commerce/pages/EnterpriseExperience"));
+const AdminControlCenter = lazy(() => import("./features/admin/pages/AdminControlCenter"));
+const DeliveryPartnerPortal = lazy(() => import("./features/delivery/pages/DeliveryPartnerPortal"));
+const PremiumRoot = lazy(() => import("./features/premium/pages/PremiumRoot"));
+const ProductListingPage = lazy(() => import("./features/premium/pages/ProductListingPage"));
+const ProductDetailPage = lazy(() => import("./features/premium/pages/ProductDetailPage"));
+const CartPage = lazy(() => import("./features/premium/pages/CartPage"));
+const CheckoutPage = lazy(() => import("./features/premium/pages/CheckoutPage"));
+const UserDashboardPage = lazy(() => import("./features/premium/pages/UserDashboardPage"));
+const AdminDashboardPage = lazy(() => import("./features/premium/pages/AdminDashboardPage"));
+const DeliveryDashboardPage = lazy(() => import("./features/premium/pages/DeliveryDashboardPage"));
 
 const queryClient = new QueryClient();
 
@@ -61,6 +72,18 @@ const App = () => (
               <Route path="showrooms" element={<Showrooms />} />
             </Route>
             <Route path="/showroom-dashboard" element={<ShowroomDashboard />} />
+            <Route path="/enterprise" element={<EnterpriseExperience />} />
+            <Route path="/admin/control-center" element={<AdminControlCenter />} />
+            <Route path="/delivery-portal" element={<DeliveryPartnerPortal />} />
+            <Route path="/premium" element={<PremiumRoot />}>
+              <Route path="products" element={<ProductListingPage />} />
+              <Route path="product/:id" element={<ProductDetailPage />} />
+              <Route path="cart" element={<CartPage />} />
+              <Route path="checkout" element={<CheckoutPage />} />
+              <Route path="dashboard" element={<UserDashboardPage />} />
+              <Route path="admin" element={<AdminDashboardPage />} />
+              <Route path="delivery" element={<DeliveryDashboardPage />} />
+            </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
           <LiveChat />
