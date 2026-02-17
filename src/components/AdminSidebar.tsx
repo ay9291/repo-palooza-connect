@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { Package, ShoppingBag, Store, LayoutDashboard, LogOut, Home, Sparkles } from "lucide-react";
+import { Package, ShoppingBag, Store, LayoutDashboard, LogOut, Home, Sparkles, SlidersHorizontal } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +20,7 @@ const menuItems = [
   { title: "Orders", url: "/admin/orders", icon: ShoppingBag },
   { title: "Products", url: "/admin/products", icon: Package },
   { title: "Showrooms", url: "/admin/showrooms", icon: Store },
+  { title: "Operations Console", url: "/admin/control-center", icon: SlidersHorizontal },
 ];
 
 export function AdminSidebar() {
@@ -42,7 +43,7 @@ export function AdminSidebar() {
             <div className="rounded-xl border bg-gradient-to-br from-background to-accent/10 p-3">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Sparkles className="w-4 h-4 text-accent" />
-                Premium Admin
+                Admin Console
               </div>
               <p className="text-xs text-muted-foreground mt-1">Manage orders, products and partners.</p>
             </div>

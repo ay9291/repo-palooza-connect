@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import AdvancedFilters, { FilterState } from "@/components/AdvancedFilters";
+import { normalizeProducts, withTimeout } from "@/features/commerce/modules/catalog-normalizer";
 
 interface Product {
   id: string;
@@ -51,11 +52,15 @@ const Shop = () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const { data, error } = await supabase.from("products").select("*").eq("is_active", true);
+      const response = await withTimeout(
+        supabase.from("products").select("*").eq("is_active", true),
+        12000,
+      ) as { data: unknown[] | null; error: { message?: string } | null };
 
-      if (error) throw error;
-      setProducts(data || []);
+      if (response.error) throw response.error;
+      setProducts(normalizeProducts(response.data || []));
     } catch {
+      setProducts([]);
       setLoadError(true);
       toast({
         title: "Error",
